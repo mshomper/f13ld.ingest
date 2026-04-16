@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScaffoldVault — Ingest</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Azeret+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #080c10;
+  --surface: #0d1318;
+  --panel:   #111a22;
+  --border:  #1c2d3a;
+  --border2: #243545;
+  --accent:  #00e5c0;
+  --accent2: #0099ff;
+  --accent3: #ff6f3c;
+  --warn:    #ffc94a;
+  --text:    #d4e8f0;
+  --muted:   #4a6a7a;
+  --muted2:  #2a4050;
+  --success: #00c97a;
+  --error:   #ff4d6d;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.4;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,229,192,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,192,0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+
+/* ── Layout ── */
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.logo-mark::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  background: conic-gradient(from 0deg, var(--accent), var(--accent2), var(--accent), var(--accent2), var(--accent));
+  border-radius: 3px;
+  animation: spin 8s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.logo-text {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+
+.logo-sub {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  margin-top: 1px;
+}
+
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-pill {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+}
+
+.status-pill.connected {
+  border-color: rgba(0,201,122,0.4);
+  color: var(--success);
+  background: rgba(0,201,122,0.06);
+}
+
+.status-pill.error {
+  border-color: rgba(255,77,109,0.4);
+  color: var(--error);
+  background: rgba(255,77,109,0.06);
+}
+
+/* ── Drop zone ── */
+.drop-zone {
+  border: 1.5px dashed var(--border2);
+  border-radius: 12px;
+  padding: 48px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  background: var(--surface);
+}
+
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(0,229,192,0.03);
+}
+
+.drop-zone.loaded {
+  border-style: solid;
+  border-color: rgba(0,229,192,0.3);
+  background: rgba(0,229,192,0.04);
+}
+
+.drop-icon {
+  font-size: 32px;
+  opacity: 0.3;
+  margin-bottom: 12px;
+}
+
+.drop-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.drop-sub {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.drop-zone input[type=file] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Summary cards ── */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.summary-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.summary-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+}
+
+.summary-card.c-total::before  { background: var(--accent2); }
+.summary-card.c-valid::before  { background: var(--success); }
+.summary-card.c-dupes::before  { background: var(--warn); }
+.summary-card.c-invalid::before { background: var(--error); }
+
+.summary-val {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 26px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.summary-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.summary-card.c-valid .summary-val   { color: var(--success); }
+.summary-card.c-dupes .summary-val   { color: var(--warn); }
+.summary-card.c-invalid .summary-val { color: var(--error); }
+.summary-card.c-total .summary-val   { color: var(--accent2); }
+
+/* ── Validation log ── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-title {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.panel-badge {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 10px;
+  color: var(--muted2);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.log-body {
+  padding: 12px 16px;
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-body::-webkit-scrollbar { width: 3px; }
+.log-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.log-line {
+  display: flex;
+  gap: 12px;
+  font-family: 'Azeret Mono', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.log-time { color: var(--muted2); flex-shrink: 0; }
+.log-line.info    .log-msg { color: var(--text); }
+.log-line.success .log-msg { color: var(--success); }
+.log-line.warn    .log-msg { color: var(--warn); }
+.log-line.error   .log-msg { color: var(--error); }
+.log-line.accent  .log-msg { color: var(--accent); }
+
+/* ── Preview table ── */
+.table-wrap {
+  overflow-x: auto;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.table-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
+.table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Azeret Mono', monospace;
+  font-size: 11px;
+}
+
+thead th {
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+}
+
+tbody tr { border-bottom: 1px solid var(--border); }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+tbody td {
+  padding: 7px 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+}
+
+.status-badge.valid   { background: rgba(0,201,122,0.12); color: var(--success); }
+.status-badge.dupe    { background: rgba(255,201,74,0.12); color: var(--warn); }
+.status-badge.invalid { background: rgba(255,77,109,0.12); color: var(--error); }
+
+/* ── Action bar ── */
+.action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-primary {
+  padding: 12px 28px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none;
+  border-radius: 8px;
+  color: #080c10;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+
+.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+.btn-secondary {
+  padding: 11px 20px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--muted);
+  font-family: 'Azeret Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+.action-status {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* ── Progress bar ── */
+.progress-wrap {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  display: none;
+}
+
+.progress-wrap.visible { display: block; }
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo-mark"></div>
+    <div>
+      <div class="logo-text">ScaffoldVault</div>
+      <div class="logo-sub">INGEST · PRIVATE TOOL</div>
+    </div>
+    <div class="header-right">
+      <div class="status-pill" id="dbStatus">connecting…</div>
+    </div>
+  </header>
+
+  <!-- Drop zone -->
+  <div class="drop-zone" id="dropZone">
+    <input type="file" accept=".json" id="fileInput">
+    <div class="drop-icon">⬡</div>
+    <div class="drop-title">Drop a sweep export JSON</div>
+    <div class="drop-sub">exported from the TPMS Parameter Sweep Tool</div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-grid" id="summaryGrid" style="display:none">
+    <div class="summary-card c-total">
+      <div class="summary-val" id="sumTotal">—</div>
+      <div class="summary-label">Designs in file</div>
+    </div>
+    <div class="summary-card c-valid">
+      <div class="summary-val" id="sumValid">—</div>
+      <div class="summary-label">Ready to insert</div>
+    </div>
+    <div class="summary-card c-dupes">
+      <div class="summary-val" id="sumDupes">—</div>
+      <div class="summary-label">Duplicates (skipped)</div>
+    </div>
+    <div class="summary-card c-invalid">
+      <div class="summary-val" id="sumInvalid">—</div>
+      <div class="summary-label">Failed validation</div>
+    </div>
+  </div>
+
+  <!-- Validation log -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Validation Log</div>
+      <div class="panel-badge" id="logBadge">idle</div>
+    </div>
+    <div class="log-body" id="logBody">
+      <div class="log-line info">
+        <span class="log-time">—</span>
+        <span class="log-msg">Drop a sweep export JSON to begin.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview table -->
+  <div class="panel" id="previewPanel" style="display:none">
+    <div class="panel-header">
+      <div class="panel-title">Design Preview</div>
+      <div class="panel-badge" id="previewBadge">—</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>ID</th>
+            <th>Preset</th>
+            <th>Domain</th>
+            <th>Material</th>
+            <th>Mode</th>
+            <th>VF %</th>
+            <th>Aniso</th>
+            <th>Ex GPa</th>
+            <th>Ey GPa</th>
+            <th>Ez GPa</th>
+            <th>κ</th>
+            <th>pore µm</th>
+            <th>pipe_r</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <!-- Action bar -->
+  <div class="action-bar" id="actionBar" style="display:none">
+    <button class="btn-primary" id="insertBtn" onclick="runInsert()" disabled>
+      ↑ Insert to ScaffoldVault
+    </button>
+    <button class="btn-secondary" onclick="resetTool()">Reset</button>
+    <div class="action-status" id="actionStatus">—</div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// ScaffoldVault Ingest — private tool
+// ═══════════════════════════════════════════════════════════════
+
+const SUPABASE_URL = 'https://axinljpecycnvfncyhfs.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_DAlrNLqbUZiwkaA6wPSMIw_YUNY85LX';
+const TABLE = 'designs';
+const BATCH_SIZE = 50;
+
+const KNOWN_PRESETS = new Set([
+  'gyroid','schwarzP','schwarzD','lidinoid',
+  'fischerKochS','fks',   // fks is the Builder's export name for Fischer-Koch S
+  'frd','splitP','neovius','iwp','gyroidHarmonic',
+  'primitiveC','octo','pHarmonic'
+]);
+
+// ─── State ───────────────────────────────────────────────────────
+let parsedFile   = null;  // raw parsed JSON
+let processedRows = [];   // { status, row, reason, design }
+
+// ─── Supabase connection check ────────────────────────────────────
+async function checkConnection() {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${TABLE}?select=id&limit=1`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    );
+    if (res.ok) {
+      setDbStatus('connected');
+      log('success', `Connected to ScaffoldVault database`);
+    } else {
+      setDbStatus('error');
+      log('error', `Database connection failed: ${res.status}`);
+    }
+  } catch(e) {
+    setDbStatus('error');
+    log('error', `Cannot reach Supabase: ${e.message}`);
+  }
+}
+
+function setDbStatus(state) {
+  const el = document.getElementById('dbStatus');
+  el.className = 'status-pill ' + state;
+  el.textContent = state === 'connected' ? '● database connected'
+                 : state === 'error'     ? '● connection failed'
+                 : 'connecting…';
+}
+
+// ─── Logging ─────────────────────────────────────────────────────
+function log(type, msg) {
+  const body = document.getElementById('logBody');
+  const now  = new Date().toTimeString().slice(0, 8);
+  const line = document.createElement('div');
+  line.className = `log-line ${type}`;
+  line.innerHTML = `<span class="log-time">${now}</span><span class="log-msg">${msg}</span>`;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+  if (body.children.length > 1 && body.children[0].querySelector('.log-time')?.textContent === '—') {
+    body.children[0].remove();
+  }
+  document.getElementById('logBadge').textContent = type === 'error' ? 'error' : 'active';
+}
+
+// ─── SHA-256 content hash ─────────────────────────────────────────
+// Deterministic fingerprint of a design's geometry + surface terms.
+// Used to detect duplicates before inserting.
+async function contentHash(design) {
+  const g = design.geometry || {};
+  const fingerprint = JSON.stringify({
+    preset:      design.meta?.preset || '',
+    mode:        g.mode || '',
+    cell_scale:  g.cell_scale || 0,
+    pipe_radius: g.pipe_radius || null,
+    phase_shift: g.phase_shift
+      ? [g.phase_shift.x, g.phase_shift.y, g.phase_shift.z]
+      : null,
+    offset:      g.offset ?? null,
+    terms:       (design.surface?.terms || []).map(t => ({
+      coef:    t.coef,
+      factors: t.factors.map(f => ({ trig: f.trig, fx: f.fx, fy: f.fy, fz: f.fz }))
+    }))
+  });
+  const buf    = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fingerprint));
+  const bytes  = Array.from(new Uint8Array(buf));
+  return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ─── Physics plausibility validation ─────────────────────────────
+// Catches random data that happens to have the right JSON keys.
+function validatePhysics(d, meta) {
+  const m = d.metrics;
+  if (!m) return 'missing metrics block';
+
+  // Volume fraction: must be physically meaningful
+  if (m.volume_fraction <= 0 || m.volume_fraction >= 75)
+    return `volume_fraction ${m.volume_fraction}% out of range (0–75%)`;
+
+  // Connectivity: connect_idx must be 0, 0.33, 0.67, or 1.0
+  const validKappa = [0, 0.33, 0.34, 0.67, 1.0];
+  if (!validKappa.some(v => Math.abs(m.connect_idx - v) < 0.02))
+    return `connect_idx ${m.connect_idx} is not a valid value (0, 0.33, 0.67, 1.0)`;
+
+  // Stiffness: connected axes must have E > 0, disconnected must be 0
+  const axes = [m.Ex_GPa, m.Ey_GPa, m.Ez_GPa];
+  const connectedCount = axes.filter(e => e > 1e-4).length;
+  const expectedKappa  = +(connectedCount / 3).toFixed(2);
+  if (Math.abs(expectedKappa - m.connect_idx) > 0.02)
+    return `connect_idx ${m.connect_idx} inconsistent with Ex/Ey/Ez (expected ${expectedKappa})`;
+
+  // Anisotropy: must be ≥ 1
+  if (m.anisotropy < 1.0)
+    return `anisotropy ${m.anisotropy} < 1 (impossible)`;
+
+  // Anisotropy consistency with directional stiffnesses
+  const connected = axes.filter(e => e > 1e-4);
+  if (connected.length >= 2) {
+    const computedAniso = Math.max(...connected) / Math.min(...connected);
+    if (Math.abs(computedAniso - m.anisotropy) / computedAniso > 0.25)
+      return `anisotropy ${m.anisotropy.toFixed(2)} inconsistent with Ex/Ey/Ez (computed ${computedAniso.toFixed(2)})`;
+  }
+
+  // Preset: warn but don't reject — display names vary between Builder versions
+  // Validation relies on surface terms presence, not preset name matching
+  const preset = d.design?.meta?.preset || meta?.preset;
+  if (preset && preset.trim() === '')
+    return 'empty preset name';
+
+  // Surface terms: must be present and non-empty
+  if (!d.design?.surface?.terms?.length)
+    return 'missing surface terms — cannot reconstruct';
+
+  return null; // valid
+}
+
+// ─── File processing ──────────────────────────────────────────────
+async function processFile(file) {
+  log('accent', `Loading ${file.name}…`);
+  document.getElementById('logBadge').textContent = 'validating';
+
+  let json;
+  try {
+    const text = await file.text();
+    json = JSON.parse(text);
+  } catch(e) {
+    log('error', `Failed to parse JSON: ${e.message}`);
+    return;
+  }
+
+  if (!json.meta || !json.designs || !Array.isArray(json.designs)) {
+    log('error', 'Invalid sweep export — missing meta or designs array');
+    return;
+  }
+
+  parsedFile = json;
+  const meta = json.meta;
+  log('info', `File: ${file.name} · preset: ${meta.preset} · domain: ${meta.domain} · ${json.designs.length} designs`);
+
+  // Fetch existing hashes to detect duplicates
+  log('info', 'Fetching existing content hashes from database…');
+  let existingHashes = new Set();
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${TABLE}?select=content_hash`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    );
+    if (res.ok) {
+      const rows = await res.json();
+      rows.forEach(r => existingHashes.add(r.content_hash));
+      log('info', `${existingHashes.size} existing records in database`);
+    }
+  } catch(e) {
+    log('warn', `Could not fetch existing hashes: ${e.message}`);
+  }
+
+  // Process each design
+  processedRows = [];
+  let nValid = 0, nDupe = 0, nInvalid = 0;
+
+  for (const d of json.designs) {
+    // Structure check
+    if (!d.metrics || !d.design) {
+      processedRows.push({ status: 'invalid', reason: 'missing metrics or design block', d });
+      nInvalid++;
+      continue;
+    }
+
+    // Physics check
+    const physicsError = validatePhysics(d, meta);
+    if (physicsError) {
+      processedRows.push({ status: 'invalid', reason: physicsError, d });
+      nInvalid++;
+      continue;
+    }
+
+    // Content hash + duplicate check
+    const hash = await contentHash(d.design);
+    if (existingHashes.has(hash)) {
+      processedRows.push({ status: 'dupe', reason: 'already in database', hash, d });
+      nDupe++;
+      continue;
+    }
+
+    // Build the database row
+    const g = d.design.geometry || {};
+    const m = d.metrics;
+    const row = {
+      exported_at:   meta.exported || null,
+      preset:        d.design.meta?.preset || meta.preset || 'unknown',
+      mode:          g.mode || meta.mode || 'unknown',
+      domain:        meta.domain   || 'general',
+      material:      meta.material || 'agnostic',
+      e_solid_gpa:   meta.E_solid_GPa || 100,
+      cell_scale:    g.cell_scale  || null,
+      pipe_radius:   g.pipe_radius || null,
+      phase_shift:   g.phase_shift || null,
+      normal_weights: g.normal_weights || null,
+      // Metrics (postgres lowercased all column names)
+      ex_gpa:             m.Ex_GPa,
+      ey_gpa:             m.Ey_GPa,
+      ez_gpa:             m.Ez_GPa,
+      anisotropy:         m.anisotropy,
+      volume_fraction:    m.volume_fraction,
+      stiffness_density:  m.stiffness_density,
+      aniso_efficiency:   m.aniso_efficiency,
+      axial_dominance:    m.axial_dominance,
+      ortho_contrast:     m.ortho_contrast,
+      load_path_eff:      m.load_path_eff,
+      stiff_axis:         m.stiff_axis,
+      connect_idx:        m.connect_idx,
+      keff_x:             m.keff_x,
+      keff_y:             m.keff_y,
+      keff_z:             m.keff_z,
+      thermal_anisotropy: m.thermal_anisotropy,
+      k_density:          m.k_density,
+      u_strain:           m.U_strain,
+      microstrain_x:      m.microstrain_x,
+      microstrain_y:      m.microstrain_y,
+      microstrain_z:      m.microstrain_z,
+      microstrain_avg:    m.microstrain_avg,
+      pore_size:          m.pore_size,
+      throat_size:        m.throat_size,
+      perc_idx:           m.perc_idx,
+      surface_complexity: m.surface_complexity,
+      // Reconstruction
+      surface_terms: d.design.surface?.terms || [],
+      geometry:      g,
+      content_hash:  hash,
+    };
+
+    processedRows.push({ status: 'valid', row, d });
+    existingHashes.add(hash); // prevent intra-file dupes
+    nValid++;
+  }
+
+  // Summary
+  log(nInvalid > 0 ? 'warn' : 'success',
+    `Validation complete — ${nValid} valid · ${nDupe} duplicates · ${nInvalid} invalid`);
+
+  document.getElementById('sumTotal').textContent   = json.designs.length;
+  document.getElementById('sumValid').textContent   = nValid;
+  document.getElementById('sumDupes').textContent   = nDupe;
+  document.getElementById('sumInvalid').textContent = nInvalid;
+  document.getElementById('summaryGrid').style.display = 'grid';
+
+  // Preview table
+  renderPreview();
+
+  document.getElementById('previewPanel').style.display = 'block';
+  document.getElementById('actionBar').style.display    = 'flex';
+  document.getElementById('dropZone').classList.add('loaded');
+
+  const insertBtn = document.getElementById('insertBtn');
+  if (nValid > 0) {
+    insertBtn.disabled = false;
+    insertBtn.textContent = `↑ Insert ${nValid} design${nValid !== 1 ? 's' : ''} to ScaffoldVault`;
+  } else {
+    insertBtn.disabled = true;
+    insertBtn.textContent = '↑ Nothing to insert';
+  }
+
+  document.getElementById('actionStatus').textContent =
+    `${meta.preset} · ${meta.domain} · ${meta.material || 'agnostic'}`;
+  document.getElementById('logBadge').textContent = 'ready';
+}
+
+function renderPreview() {
+  const tbody = document.getElementById('previewBody');
+  tbody.innerHTML = '';
+
+  processedRows.forEach(pr => {
+    const d = pr.d;
+    const m = d.metrics || {};
+    const g = d.design?.geometry || {};
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="status-badge ${pr.status}">${pr.status}</span></td>
+      <td>${d.id ?? '—'}</td>
+      <td>${parsedFile.meta?.preset || '—'}</td>
+      <td>${parsedFile.meta?.domain || '—'}</td>
+      <td>${parsedFile.meta?.material || '—'}</td>
+      <td>${g.mode || '—'}</td>
+      <td>${m.volume_fraction?.toFixed(2) ?? '—'}</td>
+      <td>${m.anisotropy?.toFixed(2) ?? '—'}</td>
+      <td>${m.Ex_GPa?.toFixed(2) ?? '—'}</td>
+      <td>${m.Ey_GPa?.toFixed(2) ?? '—'}</td>
+      <td>${m.Ez_GPa?.toFixed(2) ?? '—'}</td>
+      <td>${m.connect_idx?.toFixed(2) ?? '—'}</td>
+      <td>${m.pore_size ?? '—'}</td>
+      <td>${g.pipe_radius?.toFixed(3) ?? '—'}</td>
+      <td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis">${pr.reason || ''}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('previewBadge').textContent = `${processedRows.length} designs`;
+}
+
+// ─── Insert ───────────────────────────────────────────────────────
+async function runInsert() {
+  const validRows = processedRows.filter(p => p.status === 'valid').map(p => p.row);
+  if (validRows.length === 0) return;
+
+  document.getElementById('insertBtn').disabled = true;
+  document.getElementById('insertBtn').textContent = '⏳ Inserting…';
+  document.getElementById('progressWrap').classList.add('visible');
+
+  log('accent', `Inserting ${validRows.length} designs in batches of ${BATCH_SIZE}…`);
+
+  let inserted = 0;
+  let failed   = 0;
+
+  for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+    const batch = validRows.slice(i, i + BATCH_SIZE);
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/${TABLE}`,
+        {
+          method: 'POST',
+          headers: {
+            apikey:        SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+            Prefer:        'return=minimal'
+          },
+          body: JSON.stringify(batch)
+        }
+      );
+      if (res.ok) {
+        inserted += batch.length;
+        log('info', `Batch ${Math.floor(i/BATCH_SIZE)+1} — inserted ${batch.length} rows`);
+      } else {
+        const err = await res.text();
+        failed += batch.length;
+        log('error', `Batch ${Math.floor(i/BATCH_SIZE)+1} failed: ${err.slice(0, 120)}`);
+      }
+    } catch(e) {
+      failed += batch.length;
+      log('error', `Batch ${Math.floor(i/BATCH_SIZE)+1} error: ${e.message}`);
+    }
+
+    const pct = Math.round((i + BATCH_SIZE) / validRows.length * 100);
+    document.getElementById('progressFill').style.width = Math.min(pct, 100) + '%';
+  }
+
+  document.getElementById('progressFill').style.width = '100%';
+
+  if (failed === 0) {
+    log('success', `✓ ${inserted} designs inserted into ScaffoldVault`);
+    document.getElementById('insertBtn').textContent = `✓ ${inserted} inserted`;
+    document.getElementById('logBadge').textContent = 'done';
+  } else {
+    log('warn', `${inserted} inserted · ${failed} failed`);
+    document.getElementById('insertBtn').textContent = `⚠ ${inserted} inserted · ${failed} failed`;
+    document.getElementById('insertBtn').disabled = false;
+    document.getElementById('logBadge').textContent = 'partial';
+  }
+}
+
+// ─── Reset ────────────────────────────────────────────────────────
+function resetTool() {
+  parsedFile    = null;
+  processedRows = [];
+  document.getElementById('summaryGrid').style.display  = 'none';
+  document.getElementById('previewPanel').style.display = 'none';
+  document.getElementById('actionBar').style.display    = 'none';
+  document.getElementById('progressWrap').classList.remove('visible');
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('dropZone').classList.remove('loaded');
+  document.getElementById('previewBody').innerHTML = '';
+  document.getElementById('logBadge').textContent = 'idle';
+  document.getElementById('fileInput').value = '';
+  log('info', 'Reset — drop a new sweep export to begin.');
+}
+
+// ─── File input wiring ────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) processFile(e.target.files[0]);
+});
+
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+});
+
+// ─── Init ─────────────────────────────────────────────────────────
+checkConnection();
+</script>
+</body>
+</html>
