@@ -2,7 +2,7 @@
 
 **Part of the [F13LD suite](https://f13ld.app) by [Not a Robot Engineering](https://notarobot-eng.com)**
 
-**[Open the Tool](https://github.io/mshomper/f13ld.ingest)**
+**[Open the Tool](https://mshomper.github.io/f13ld.ingest)**
 
 Ingest is the bridge between the F13LD design tools and the Vault database. It accepts a JSON export from the Sweep tool, runs a series of structural and physics plausibility checks on each design, and uploads validated records to the PostgreSQL backend that powers Vault queries.
 
