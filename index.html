@@ -3,445 +3,559 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScaffoldVault — Ingest</title>
+<title>F13LD — Ingest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Azeret+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Outfit:wght@300;400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* ── F13LD palette ─────────────────────────────────────────────────────── */
+:root{
+  --bg:        #06080c;
+  --bg-alt:    #06080f;
+  --panel:     #111118;
+  --panel-2:   #0d140d;
+  --border:    #1a2a1a;
+  --border-2:  #2a3a2a;
 
-:root {
-  --bg:      #080c10;
-  --surface: #0d1318;
-  --panel:   #111a22;
-  --border:  #1c2d3a;
-  --border2: #243545;
-  --accent:  #00e5c0;
-  --accent2: #0099ff;
-  --accent3: #ff6f3c;
-  --warn:    #ffc94a;
-  --text:    #d4e8f0;
-  --muted:   #4a6a7a;
-  --muted2:  #2a4050;
-  --success: #00c97a;
-  --error:   #ff4d6d;
+  --primary:   #1D9E75;
+  --secondary: #a5d8c8;
+  --neon:      #c8f542;
+  --line-2:    #2c4e30;
+
+  --text:      #a0b8a0;
+  --text-2:    #7a9a7a;
+  --muted:     #4a6a4a;
+  --muted-2:   #2a4a2a;
+
+  --success:   #1D9E75;
+  --warn:      #f5c542;
+  --error:     #e25b4a;
+
+  /* Ingest tool color (purple/indigo) */
+  --tool:        #3C3489;
+  --tool-light:  #EEEDFE;
+  --tool-mid:    #7F77DD;
 }
 
-html, body {
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Outfit', sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
+html,body{
+  min-height:100%;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Exo 2',system-ui,sans-serif;
+  font-size:14px;
+  line-height:1.55;
 }
 
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-  pointer-events: none;
-  z-index: 999;
-  opacity: 0.4;
+/* ── F13LD unified header (matches TPMS exactly) ─────────────────────── */
+.f13ld-header{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--bg-alt);
+  border-bottom:0.5px solid var(--border);
+  padding:0 14px;height:48px;flex-shrink:0;
+  font-family:'Exo 2',system-ui,sans-serif;
+}
+.fh-left{display:flex;align-items:center;gap:10px}
+.fh-brand{display:flex;align-items:center;gap:8px;text-decoration:none}
+.fh-wordmark{font-size:17px;font-weight:700;letter-spacing:0.1em;line-height:1}
+.fh-divider{width:0.5px;height:24px;background:var(--border)}
+.fh-tool-name{
+  font-size:15px;font-weight:700;letter-spacing:0.1em;
+  text-transform:uppercase;line-height:1;
+  color:var(--tool);
+}
+.fh-right{display:flex;align-items:center;gap:10px}
+.fh-version{
+  font-size:10px;color:var(--muted-2);
+  letter-spacing:0.1em;font-family:'Exo 2',system-ui,sans-serif;
+}
+.fh-icon{
+  width:28px;height:28px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  background:var(--tool-light);
+}
+.fh-status{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:11px;letter-spacing:0.06em;
+  padding:4px 10px 4px 9px;
+  border-radius:14px;
+  border:0.5px solid var(--border-2);
+  color:var(--muted);
+  background:transparent;
+  font-family:'Exo 2',system-ui,sans-serif;
+  transition:color 0.2s, border-color 0.2s, background 0.2s;
+}
+.fh-wave{
+  width:24px;height:8px;flex-shrink:0;
+  display:block;
+}
+.fh-wave-line{transition:stroke-dasharray 0.2s}
+.fh-wave-dot{opacity:0;transition:opacity 0.2s}
+.fh-vault-label{
+  letter-spacing:0.12em;
+  font-weight:500;
+}
+/* Connecting (initial) state */
+.fh-status.connecting{
+  color:var(--muted);
+  border-color:var(--border-2);
+}
+.fh-status.connecting .fh-wave-line{
+  stroke-dasharray:1.5 2;
+  animation:f13ld-wave-shimmer 1.4s linear infinite;
+}
+@keyframes f13ld-wave-shimmer{
+  to { stroke-dashoffset:-7; }
+}
+/* Connected state — neon, breathing pulse on the center dot */
+.fh-status.connected{
+  border-color:rgba(29,158,117,0.45);
+  color:var(--neon);
+  background:rgba(29,158,117,0.07);
+}
+.fh-status.connected .fh-wave-line{
+  stroke-dasharray:none;
+  animation:f13ld-wave-breathe 2.6s ease-in-out infinite;
+}
+.fh-status.connected .fh-wave-dot{
+  opacity:1;
+  animation:f13ld-dot-pulse 2.6s ease-in-out infinite;
+}
+@keyframes f13ld-wave-breathe{
+  0%,100% { opacity:1; stroke-width:1.4; }
+  50%     { opacity:0.55; stroke-width:1.2; }
+}
+@keyframes f13ld-dot-pulse{
+  0%,100% { r:1.4; opacity:1; }
+  50%     { r:2.2; opacity:0.5; }
+}
+/* Error state — broken/dashed wave, red */
+.fh-status.error{
+  border-color:rgba(226,91,74,0.45);
+  color:var(--error);
+  background:rgba(226,91,74,0.07);
+}
+.fh-status.error .fh-wave-line{
+  stroke-dasharray:2 2;
+  animation:none;
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(0,229,192,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,229,192,0.025) 1px, transparent 1px);
-  background-size: 32px 32px;
-  pointer-events: none;
+/* ── App layout ───────────────────────────────────────────────────────── */
+.app{
+  max-width:920px;margin:0 auto;
+  padding:24px 18px 80px;
+  display:flex;flex-direction:column;gap:18px;
 }
 
-/* ── Layout ── */
-.app {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 40px 24px 80px;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
+/* ── Card ─────────────────────────────────────────────────────────────── */
+.card{
+  background:var(--panel);
+  border:0.5px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+}
+.card-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;
+  border-bottom:0.5px solid var(--border);
+}
+.card-title{
+  font-size:11px;font-weight:700;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--text-2);
+}
+.card-badge{
+  font-size:10px;letter-spacing:0.08em;
+  color:var(--muted);
+  background:var(--panel-2);
+  border:0.5px solid var(--border);
+  padding:2px 8px;border-radius:10px;
+}
+.card-body{padding:14px}
+.card-note{
+  font-size:11px;color:var(--muted);line-height:1.65;
+  padding:0 14px 12px;
+}
+.card-note a{color:var(--primary);text-decoration:none;border-bottom:0.5px dotted var(--primary)}
+.card-note a:hover{color:var(--neon);border-color:var(--neon)}
+
+/* ── Form fields ──────────────────────────────────────────────────────── */
+.field-grid{
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:10px 14px;
+}
+.field-grid.full > .field{grid-column:1 / -1}
+.field{display:flex;flex-direction:column;gap:4px}
+.field-label{
+  font-size:10px;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--muted);
+}
+.field-label .req{color:var(--neon);margin-left:3px}
+.field input[type=text],
+.field input[type=email],
+.field input[type=number],
+.field textarea{
+  font-family:'Exo 2',system-ui,sans-serif;
+  font-size:13px;
+  padding:7px 10px;
+  background:var(--panel-2);
+  border:0.5px solid var(--border-2);
+  border-radius:6px;
+  color:var(--text);
+  width:100%;
+  transition:border-color 0.15s, background 0.15s;
+}
+.field input:focus,
+.field textarea:focus{
+  outline:none;
+  border-color:var(--primary);
+  background:rgba(29,158,117,0.04);
+}
+.field input.invalid,
+.field textarea.invalid{
+  border-color:rgba(226,91,74,0.5);
+}
+.field textarea{resize:vertical;min-height:48px;font-family:'Exo 2',system-ui,sans-serif}
+
+/* ── License acknowledgment ───────────────────────────────────────────── */
+.license-card{
+  background:var(--panel);
+  border:0.5px solid var(--border);
+  border-left:2px solid var(--neon);
+  border-radius:10px;
+  padding:12px 14px;
+  display:flex;align-items:flex-start;gap:10px;
+}
+.license-card input[type=checkbox]{
+  appearance:none;-webkit-appearance:none;
+  width:16px;height:16px;flex-shrink:0;margin-top:2px;
+  border:1px solid var(--border-2);
+  background:var(--panel-2);
+  border-radius:3px;
+  cursor:pointer;
+  position:relative;
+  transition:all 0.15s;
+}
+.license-card input[type=checkbox]:checked{
+  background:var(--neon);
+  border-color:var(--neon);
+}
+.license-card input[type=checkbox]:checked::after{
+  content:'✓';
+  position:absolute;
+  top:-2px;left:2px;
+  font-size:14px;font-weight:700;
+  color:var(--bg);
+}
+.license-text{
+  font-size:12px;color:var(--text-2);line-height:1.6;
+  cursor:pointer;
+}
+.license-text strong{color:var(--text);font-weight:500}
+.license-text a{color:var(--primary);text-decoration:none;border-bottom:0.5px dotted var(--primary)}
+.license-text a:hover{color:var(--neon);border-color:var(--neon)}
+
+/* ── Drop zone ────────────────────────────────────────────────────────── */
+.drop-zone{
+  position:relative;
+  border:1.5px dashed var(--border-2);
+  border-radius:10px;
+  padding:36px 24px;
+  text-align:center;
+  cursor:pointer;
+  transition:border-color 0.15s, background 0.15s;
+  background:var(--panel);
+}
+.drop-zone:hover, .drop-zone.drag-over{
+  border-color:var(--primary);
+  background:rgba(29,158,117,0.04);
+}
+.drop-zone.loaded{
+  border-style:solid;
+  border-color:rgba(29,158,117,0.4);
+  background:rgba(29,158,117,0.05);
+}
+.drop-zone.disabled{
+  opacity:0.4;
+  cursor:not-allowed;
+  pointer-events:none;
+}
+.drop-icon{
+  font-size:28px;color:var(--tool-mid);opacity:0.55;margin-bottom:8px;
+}
+.drop-title{
+  font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px;
+}
+.drop-sub{
+  font-size:11px;color:var(--muted);letter-spacing:0.04em;
+}
+.drop-zone input[type=file]{
+  position:absolute;inset:0;opacity:0;cursor:pointer;
+  width:100%;height:100%;
 }
 
-/* ── Header ── */
-.header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--border);
+/* ── Summary cards ────────────────────────────────────────────────────── */
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  gap:10px;
+}
+.summary-card{
+  background:var(--panel);
+  border:0.5px solid var(--border);
+  border-radius:10px;
+  padding:12px 14px;
+  position:relative;overflow:hidden;
+}
+.summary-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+}
+.summary-card.c-total::before  { background:var(--tool-mid); }
+.summary-card.c-valid::before  { background:var(--primary); }
+.summary-card.c-dupes::before  { background:var(--warn); }
+.summary-card.c-invalid::before{ background:var(--error); }
+.summary-val{
+  font-size:24px;font-weight:700;
+  color:var(--text);font-variant-numeric:tabular-nums;
+  margin-bottom:2px;line-height:1;
+}
+.summary-label{
+  font-size:10px;letter-spacing:0.08em;color:var(--muted);
+  text-transform:uppercase;
+}
+.summary-card.c-valid   .summary-val{color:var(--primary);}
+.summary-card.c-dupes   .summary-val{color:var(--warn);}
+.summary-card.c-invalid .summary-val{color:var(--error);}
+.summary-card.c-total   .summary-val{color:var(--tool-mid);}
+
+/* ── Validation log ───────────────────────────────────────────────────── */
+.log-body{
+  padding:10px 14px;
+  max-height:170px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:3px;
+}
+.log-body::-webkit-scrollbar{width:3px}
+.log-body::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+.log-line{
+  display:flex;gap:10px;
+  font-family:'Exo 2',system-ui,sans-serif;
+  font-size:11px;line-height:1.55;
+  font-variant-numeric:tabular-nums;
+}
+.log-time{color:var(--muted-2);flex-shrink:0;font-size:10px;letter-spacing:0.05em}
+.log-line.info    .log-msg{color:var(--text);}
+.log-line.success .log-msg{color:var(--primary);}
+.log-line.warn    .log-msg{color:var(--warn);}
+.log-line.error   .log-msg{color:var(--error);}
+.log-line.accent  .log-msg{color:var(--neon);}
+
+/* ── Preview table ────────────────────────────────────────────────────── */
+.table-wrap{
+  overflow-x:auto;max-height:340px;overflow-y:auto;
+}
+.table-wrap::-webkit-scrollbar{width:4px;height:4px}
+.table-wrap::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:11px;
+  font-variant-numeric:tabular-nums;
+}
+thead th{
+  padding:8px 10px;text-align:left;
+  color:var(--muted);
+  border-bottom:0.5px solid var(--border);
+  white-space:nowrap;
+  font-weight:500;letter-spacing:0.05em;
+  background:var(--panel);
+  position:sticky;top:0;z-index:1;
+  text-transform:uppercase;font-size:10px;
+}
+tbody tr{border-bottom:0.5px solid var(--border)}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:rgba(255,255,255,0.015)}
+tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
+
+.status-badge{
+  display:inline-block;
+  padding:2px 8px;border-radius:10px;
+  font-size:10px;letter-spacing:0.04em;
+}
+.status-badge.valid  {background:rgba(29,158,117,0.12);color:var(--primary);}
+.status-badge.dupe   {background:rgba(245,197,66,0.12);color:var(--warn);}
+.status-badge.invalid{background:rgba(226,91,74,0.12);color:var(--error);}
+
+.family-pill{
+  display:inline-block;
+  padding:1px 7px;border-radius:8px;
+  font-size:10px;letter-spacing:0.06em;
+  text-transform:uppercase;font-weight:500;
+}
+.family-pill.tpms { background:#E1F5EE;color:#085041; }
+.family-pill.noise{ background:#FAECE7;color:#712B13; }
+.family-pill.grain{ background:#EDECE8;color:#3D3A30; }
+
+/* ── Action bar ───────────────────────────────────────────────────────── */
+.action-bar{
+  display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;
+}
+.btn-primary{
+  padding:11px 22px;
+  background:var(--primary);
+  border:none;
+  border-radius:8px;
+  color:var(--bg);
+  font-family:'Exo 2',system-ui,sans-serif;
+  font-size:13px;font-weight:700;
+  letter-spacing:0.06em;text-transform:uppercase;
+  cursor:pointer;
+  transition:background 0.15s, transform 0.1s;
+}
+.btn-primary:hover:not(:disabled){background:var(--neon);color:var(--bg);transform:translateY(-1px);}
+.btn-primary:disabled{opacity:0.3;cursor:not-allowed;}
+.btn-secondary{
+  padding:10px 18px;
+  background:transparent;
+  border:0.5px solid var(--border-2);
+  border-radius:8px;
+  color:var(--text-2);
+  font-family:'Exo 2',system-ui,sans-serif;
+  font-size:11px;letter-spacing:0.06em;
+  text-transform:uppercase;
+  cursor:pointer;
+  transition:border-color 0.15s, color 0.15s;
+}
+.btn-secondary:hover{border-color:var(--primary);color:var(--primary);}
+.action-status{
+  font-size:11px;color:var(--muted);
+  margin-left:auto;
+  letter-spacing:0.04em;
 }
 
-.logo-mark {
-  width: 36px;
-  height: 36px;
-  border: 1.5px solid var(--accent);
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  position: relative;
-  overflow: hidden;
-  flex-shrink: 0;
+/* ── Progress bar ─────────────────────────────────────────────────────── */
+.progress-wrap{
+  height:3px;
+  background:var(--border);
+  border-radius:2px;
+  overflow:hidden;
+  display:none;
+}
+.progress-wrap.visible{display:block}
+.progress-fill{
+  height:100%;
+  background:linear-gradient(90deg, var(--primary), var(--neon));
+  border-radius:2px;
+  width:0%;
+  transition:width 0.3s ease;
 }
 
-.logo-mark::before {
-  content: '';
-  position: absolute;
-  inset: 4px;
-  background: conic-gradient(from 0deg, var(--accent), var(--accent2), var(--accent), var(--accent2), var(--accent));
-  border-radius: 3px;
-  animation: spin 8s linear infinite;
-  opacity: 0.7;
+/* ── Section heading inside cards ─────────────────────────────────────── */
+.intro{
+  font-size:12px;color:var(--text-2);
+  line-height:1.65;margin-bottom:10px;
 }
+.intro strong{color:var(--text);font-weight:500}
 
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.logo-text {
-  font-family: 'Azeret Mono', monospace;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--accent);
-  letter-spacing: 0.05em;
+@media (max-width:640px){
+  .field-grid{grid-template-columns:1fr}
+  .summary-grid{grid-template-columns:repeat(2, 1fr)}
+  .action-status{margin-left:0;width:100%}
 }
-
-.logo-sub {
-  font-family: 'Azeret Mono', monospace;
-  font-size: 10px;
-  color: var(--muted);
-  letter-spacing: 0.12em;
-  margin-top: 1px;
-}
-
-.header-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-pill {
-  font-family: 'Azeret Mono', monospace;
-  font-size: 10px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  border: 1px solid var(--border2);
-  color: var(--muted);
-}
-
-.status-pill.connected {
-  border-color: rgba(0,201,122,0.4);
-  color: var(--success);
-  background: rgba(0,201,122,0.06);
-}
-
-.status-pill.error {
-  border-color: rgba(255,77,109,0.4);
-  color: var(--error);
-  background: rgba(255,77,109,0.06);
-}
-
-/* ── Drop zone ── */
-.drop-zone {
-  border: 1.5px dashed var(--border2);
-  border-radius: 12px;
-  padding: 48px 32px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-  background: var(--surface);
-}
-
-.drop-zone:hover, .drop-zone.drag-over {
-  border-color: var(--accent);
-  background: rgba(0,229,192,0.03);
-}
-
-.drop-zone.loaded {
-  border-style: solid;
-  border-color: rgba(0,229,192,0.3);
-  background: rgba(0,229,192,0.04);
-}
-
-.drop-icon {
-  font-size: 32px;
-  opacity: 0.3;
-  margin-bottom: 12px;
-}
-
-.drop-title {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--text);
-  margin-bottom: 6px;
-}
-
-.drop-sub {
-  font-family: 'Azeret Mono', monospace;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.drop-zone input[type=file] {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-  width: 100%;
-  height: 100%;
-}
-
-/* ── Summary cards ── */
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-
-.summary-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  position: relative;
-  overflow: hidden;
-}
-
-.summary-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-}
-
-.summary-card.c-total::before  { background: var(--accent2); }
-.summary-card.c-valid::before  { background: var(--success); }
-.summary-card.c-dupes::before  { background: var(--warn); }
-.summary-card.c-invalid::before { background: var(--error); }
-
-.summary-val {
-  font-family: 'Azeret Mono', monospace;
-  font-size: 26px;
-  font-weight: 600;
-  margin-bottom: 3px;
-}
-
-.summary-label {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.summary-card.c-valid .summary-val   { color: var(--success); }
-.summary-card.c-dupes .summary-val   { color: var(--warn); }
-.summary-card.c-invalid .summary-val { color: var(--error); }
-.summary-card.c-total .summary-val   { color: var(--accent2); }
-
-/* ── Validation log ── */
-.panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.panel-title {
-  font-family: 'Azeret Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  text-transform: uppercase;
-}
-
-.panel-badge {
-  font-family: 'Azeret Mono', monospace;
-  font-size: 10px;
-  color: var(--muted2);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.log-body {
-  padding: 12px 16px;
-  max-height: 180px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.log-body::-webkit-scrollbar { width: 3px; }
-.log-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-.log-line {
-  display: flex;
-  gap: 12px;
-  font-family: 'Azeret Mono', monospace;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.log-time { color: var(--muted2); flex-shrink: 0; }
-.log-line.info    .log-msg { color: var(--text); }
-.log-line.success .log-msg { color: var(--success); }
-.log-line.warn    .log-msg { color: var(--warn); }
-.log-line.error   .log-msg { color: var(--error); }
-.log-line.accent  .log-msg { color: var(--accent); }
-
-/* ── Preview table ── */
-.table-wrap {
-  overflow-x: auto;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.table-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
-.table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: 'Azeret Mono', monospace;
-  font-size: 11px;
-}
-
-thead th {
-  padding: 8px 12px;
-  text-align: left;
-  color: var(--muted);
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-  font-weight: 400;
-  letter-spacing: 0.05em;
-  background: var(--surface);
-  position: sticky;
-  top: 0;
-}
-
-tbody tr { border-bottom: 1px solid var(--border); }
-tbody tr:last-child { border-bottom: none; }
-tbody tr:hover { background: rgba(255,255,255,0.02); }
-
-tbody td {
-  padding: 7px 12px;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 10px;
-}
-
-.status-badge.valid   { background: rgba(0,201,122,0.12); color: var(--success); }
-.status-badge.dupe    { background: rgba(255,201,74,0.12); color: var(--warn); }
-.status-badge.invalid { background: rgba(255,77,109,0.12); color: var(--error); }
-
-/* ── Action bar ── */
-.action-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.btn-primary {
-  padding: 12px 28px;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  border: none;
-  border-radius: 8px;
-  color: #080c10;
-  font-family: 'Outfit', sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: opacity 0.2s, transform 0.15s;
-}
-
-.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
-.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
-
-.btn-secondary {
-  padding: 11px 20px;
-  background: transparent;
-  border: 1px solid var(--border2);
-  border-radius: 8px;
-  color: var(--muted);
-  font-family: 'Azeret Mono', monospace;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-
-.action-status {
-  font-family: 'Azeret Mono', monospace;
-  font-size: 11px;
-  color: var(--muted);
-  margin-left: auto;
-}
-
-/* ── Progress bar ── */
-.progress-wrap {
-  height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-  display: none;
-}
-
-.progress-wrap.visible { display: block; }
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent), var(--accent2));
-  border-radius: 2px;
-  width: 0%;
-  transition: width 0.3s ease;
-}
-
-.hidden { display: none !important; }
 </style>
 </head>
 <body>
+
+<!-- ═══ F13LD UNIFIED HEADER ════════════════════════════════════════════ -->
+<div class="f13ld-header">
+  <div class="fh-left">
+    <a class="fh-brand" href="https://f13ld.app" target="_blank" rel="noopener">
+      <svg width="24" height="24" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <defs><clipPath id="f13-clip"><path d="M50,5 C91,5 95,9 95,50 C95,91 91,95 50,95 C9,95 5,91 5,50 C5,9 9,5 50,5Z"/></clipPath></defs>
+        <path d="M50,5 C91,5 95,9 95,50 C95,91 91,95 50,95 C9,95 5,91 5,50 C5,9 9,5 50,5Z" fill="#111e13" stroke="#1D9E75" stroke-width="5"/>
+        <g clip-path="url(#f13-clip)" fill="none">
+          <path d="M0,50 Q25,40 50,50 Q75,60 100,50" stroke="#c8f542" stroke-width="6"/>
+          <path d="M50,0 Q40,25 50,50 Q60,75 50,100" stroke="#c8f542" stroke-width="6"/>
+          <path d="M0,31 Q25,21 50,31 Q75,41 100,31" stroke="#2c4e30" stroke-width="3"/>
+          <path d="M0,69 Q25,59 50,69 Q75,79 100,69" stroke="#2c4e30" stroke-width="3"/>
+          <path d="M31,0 Q21,25 31,50 Q41,75 31,100" stroke="#2c4e30" stroke-width="3"/>
+          <path d="M69,0 Q59,25 69,50 Q79,75 69,100" stroke="#2c4e30" stroke-width="3"/>
+          <circle cx="50" cy="50" r="7" fill="#c8f542"/>
+        </g>
+        <path d="M50,5 C91,5 95,9 95,50 C95,91 91,95 50,95 C9,95 5,91 5,50 C5,9 9,5 50,5Z" fill="none" stroke="#1D9E75" stroke-width="5"/>
+      </svg>
+      <div class="fh-wordmark"><span style="color:#1D9E75">F</span><span style="color:#c8f542">1</span><span style="color:#c8f542">3</span><span style="color:#1D9E75">LD</span></div>
+    </a>
+    <div class="fh-divider"></div>
+    <div class="fh-tool-name">INGEST</div>
+  </div>
+  <div class="fh-right">
+    <div class="fh-status connecting" id="dbStatus" title="F13LD.vault connection">
+      <svg class="fh-wave" viewBox="0 0 32 10" aria-hidden="true">
+        <path class="fh-wave-line" d="M0,5 Q4,1 8,5 T16,5 T24,5 T32,5"
+              fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <circle class="fh-wave-dot" cx="16" cy="5" r="1.4" fill="currentColor"/>
+      </svg>
+      <span class="fh-vault-label">vault</span>
+    </div>
+    <span class="fh-version">v0.2.0</span>
+    <div class="fh-icon">
+      <svg width="18" height="18" viewBox="0 0 40 40">
+        <line x1="3" y1="9"  x2="16" y2="20" stroke="#3C3489" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="3" y1="20" x2="16" y2="20" stroke="#3C3489" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="3" y1="31" x2="16" y2="20" stroke="#3C3489" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="16" y1="20" x2="22" y2="20" stroke="#3C3489" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M20 17 L23 20 L20 23" stroke="#3C3489" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <ellipse cx="31" cy="14" rx="7" ry="3" stroke="#3C3489" stroke-width="1.5" fill="none"/>
+        <line x1="24" y1="14" x2="24" y2="28" stroke="#3C3489" stroke-width="1.5"/>
+        <line x1="38" y1="14" x2="38" y2="28" stroke="#3C3489" stroke-width="1.5"/>
+        <ellipse cx="31" cy="28" rx="7" ry="3" stroke="#3C3489" stroke-width="1.5" fill="none"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
 <div class="app">
 
-  <!-- Header -->
-  <header class="header">
-    <div class="logo-mark"></div>
-    <div>
-      <div class="logo-text">ScaffoldVault</div>
-      <div class="logo-sub">INGEST · PRIVATE TOOL</div>
+  <!-- ═══ CONTRIBUTOR CARD (persistent identity, pre-filled from browser) ═══ -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Contributor</div>
+      <div class="card-badge" id="contribStatus">required</div>
     </div>
-    <div class="header-right">
-      <div class="status-pill" id="dbStatus">connecting…</div>
+    <div class="card-body">
+      <div class="intro">
+        Your name and contact are attached to every design in this batch. They
+        let people credit your work and find more of it later in F13LD.vault.
+        <strong>Saved in your browser</strong> so you don't have to retype.
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label class="field-label" for="cName">Name<span class="req">*</span></label>
+          <input type="text" id="cName" placeholder="e.g. Matt Shomper, Acme Lattice Labs" maxlength="120" oninput="onContribInput()">
+        </div>
+        <div class="field">
+          <label class="field-label" for="cContact">Contact<span class="req">*</span></label>
+          <input type="text" id="cContact" placeholder="email · ORCID · GitHub · lab URL" maxlength="200" oninput="onContribInput()">
+        </div>
+        <div class="field" style="grid-column:1 / -1">
+          <label class="field-label" for="cNotes">Notes (optional)</label>
+          <input type="text" id="cNotes" placeholder="e.g. Submitted alongside RAPID 2026 paper" maxlength="280" oninput="onContribInput()">
+        </div>
+      </div>
     </div>
-  </header>
-
-  <!-- Drop zone -->
-  <div class="drop-zone" id="dropZone">
-    <input type="file" accept=".json" id="fileInput">
-    <div class="drop-icon">⬡</div>
-    <div class="drop-title">Drop a sweep export JSON</div>
-    <div class="drop-sub">exported from the TPMS Parameter Sweep Tool</div>
   </div>
 
-  <!-- Summary -->
+  <!-- ═══ DROP ZONE (always enabled when DB connected) ══════════════════ -->
+  <div class="drop-zone" id="dropZone">
+    <input type="file" accept=".json,application/json" id="fileInput">
+    <div class="drop-icon">⬡</div>
+    <div class="drop-title" id="dropTitle">Drop a sweep export JSON to begin</div>
+    <div class="drop-sub" id="dropSub">F13LD.sweep export · TPMS · Noise · Grain</div>
+  </div>
+
+  <!-- ═══ SUMMARY CARDS (appear after a file is loaded) ════════════════ -->
   <div class="summary-grid" id="summaryGrid" style="display:none">
     <div class="summary-card c-total">
       <div class="summary-val" id="sumTotal">—</div>
@@ -461,11 +575,11 @@ tbody td {
     </div>
   </div>
 
-  <!-- Validation log -->
-  <div class="panel">
-    <div class="panel-header">
-      <div class="panel-title">Validation Log</div>
-      <div class="panel-badge" id="logBadge">idle</div>
+  <!-- ═══ VALIDATION LOG ════════════════════════════════════════════════ -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Validation log</div>
+      <div class="card-badge" id="logBadge">idle</div>
     </div>
     <div class="log-body" id="logBody">
       <div class="log-line info">
@@ -475,11 +589,11 @@ tbody td {
     </div>
   </div>
 
-  <!-- Preview table -->
-  <div class="panel" id="previewPanel" style="display:none">
-    <div class="panel-header">
-      <div class="panel-title">Design Preview</div>
-      <div class="panel-badge" id="previewBadge">—</div>
+  <!-- ═══ PREVIEW TABLE (appears after a file is loaded) ═══════════════ -->
+  <div class="card" id="previewPanel" style="display:none">
+    <div class="card-head">
+      <div class="card-title">Design preview</div>
+      <div class="card-badge" id="previewBadge">—</div>
     </div>
     <div class="table-wrap">
       <table>
@@ -487,18 +601,14 @@ tbody td {
           <tr>
             <th>Status</th>
             <th>ID</th>
+            <th>Family</th>
             <th>Preset</th>
-            <th>Domain</th>
-            <th>Material</th>
-            <th>Mode</th>
-            <th>VF %</th>
+            <th>VF&nbsp;%</th>
             <th>Aniso</th>
-            <th>Ex GPa</th>
-            <th>Ey GPa</th>
-            <th>Ez GPa</th>
-            <th>κ</th>
-            <th>pore µm</th>
-            <th>pipe_r</th>
+            <th>Ex&nbsp;GPa</th>
+            <th>Ey&nbsp;GPa</th>
+            <th>Ez&nbsp;GPa</th>
+            <th>Stiff/ρ</th>
             <th>Reason</th>
           </tr>
         </thead>
@@ -507,15 +617,58 @@ tbody td {
     </div>
   </div>
 
-  <!-- Progress -->
+  <!-- ═══ APPLICATION CONTEXT CARD (auto-fills from sweep context) ═════ -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Application context</div>
+      <div class="card-badge" id="ctxStatus">required</div>
+    </div>
+    <div class="card-body">
+      <div class="intro">
+        Where these designs are intended to live. Free text — be as specific as
+        useful (e.g. <strong>orthopedic_spine</strong>, <strong>aerospace_heatshield</strong>).
+        Domain, material, and E_solid auto-fill from the sweep export when its
+        <code style="font-size:11px;color:var(--text);background:var(--panel-2);padding:1px 5px;border-radius:3px">context</code> block is present. You can override any value.
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label class="field-label" for="cDomain">Domain<span class="req">*</span></label>
+          <input type="text" id="cDomain" placeholder="auto-detected from sweep · or e.g. orthopedic" maxlength="80" oninput="onCtxInput()">
+        </div>
+        <div class="field">
+          <label class="field-label" for="cMaterial">Material<span class="req">*</span></label>
+          <input type="text" id="cMaterial" placeholder="auto-detected from sweep · or e.g. ti6al4v" maxlength="80" oninput="onCtxInput()">
+        </div>
+        <div class="field" style="grid-column:1 / -1">
+          <label class="field-label" for="cESolid">E_solid (GPa) — Young's modulus of the solid material used in homogenization</label>
+          <input type="number" id="cESolid" placeholder="auto-detected from sweep context block" step="0.1" min="0" oninput="onCtxInput()">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ LICENSE ACKNOWLEDGMENT ════════════════════════════════════════ -->
+  <label class="license-card" for="cLicense">
+    <input type="checkbox" id="cLicense" onchange="onLicenseChange()">
+    <span class="license-text">
+      I confirm I have the right to share these designs and release them
+      under <strong>CC0 1.0 Universal</strong> (public domain dedication).
+      Designs and metadata become publicly available in F13LD.vault.
+      Contributor name and notes are public; contact is stored privately and
+      revealed only on request.
+      <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">Read the license</a>.
+    </span>
+  </label>
+
+  <!-- ═══ PROGRESS ══════════════════════════════════════════════════════ -->
   <div class="progress-wrap" id="progressWrap">
     <div class="progress-fill" id="progressFill"></div>
   </div>
 
-  <!-- Action bar -->
+  <!-- ═══ ACTION BAR (appears after a file is loaded) ══════════════════ -->
   <div class="action-bar" id="actionBar" style="display:none">
     <button class="btn-primary" id="insertBtn" onclick="runInsert()" disabled>
-      ↑ Insert to ScaffoldVault
+      ↑ Insert to F13LD.vault
     </button>
     <button class="btn-secondary" onclick="resetTool()">Reset</button>
     <div class="action-status" id="actionStatus">—</div>
@@ -524,347 +677,590 @@ tbody td {
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
-// ScaffoldVault Ingest — private tool
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// F13LD.ingest — public ingest tool for the F13LD design suite
+// Reads sweep exports (TPMS · Noise · Grain), validates per-family physics,
+// and inserts into the public f13ld_designs Supabase table.
+// ═══════════════════════════════════════════════════════════════════════
 
-const SUPABASE_URL = 'https://axinljpecycnvfncyhfs.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_DAlrNLqbUZiwkaA6wPSMIw_YUNY85LX';
-const TABLE = 'designs';
-const BATCH_SIZE = 50;
+// ── Config ─────────────────────────────────────────────────────────────
+var SUPABASE_URL = 'https://axinljpecycnvfncyhfs.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_DAlrNLqbUZiwkaA6wPSMIw_YUNY85LX';
+var TABLE        = 'f13ld_designs';
+var BATCH_SIZE   = 50;
+var LICENSE_TAG  = 'CC0-1.0';
 
-const KNOWN_PRESETS = new Set([
-  'gyroid','schwarzP','schwarzD','lidinoid',
-  'fischerKochS','fks',   // fks is the Builder's export name for Fischer-Koch S
-  'frd','splitP','neovius','iwp','gyroidHarmonic',
-  'primitiveC','octo','pHarmonic'
-]);
+// VF acceptance window (percent). Sparse PI-TPMS designs run < 2.5%.
+var VF_MIN = 1.25;
+var VF_MAX = 80.0;
 
-// ─── State ───────────────────────────────────────────────────────
-let parsedFile   = null;  // raw parsed JSON
-let processedRows = [];   // { status, row, reason, design }
+var KNOWN_FAMILIES = ['tpms', 'noise', 'grain'];
 
-// ─── Supabase connection check ────────────────────────────────────
-async function checkConnection() {
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/${TABLE}?select=id&limit=1`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
-    );
-    if (res.ok) {
-      setDbStatus('connected');
-      log('success', `Connected to ScaffoldVault database`);
-    } else {
-      setDbStatus('error');
-      log('error', `Database connection failed: ${res.status}`);
-    }
-  } catch(e) {
-    setDbStatus('error');
-    log('error', `Cannot reach Supabase: ${e.message}`);
-  }
-}
+// ── State ──────────────────────────────────────────────────────────────
+var parsedFile    = null;     // raw parsed JSON
+var processedRows = [];       // {status, row, reason, design}
+var dbConnected   = false;
 
-function setDbStatus(state) {
-  const el = document.getElementById('dbStatus');
-  el.className = 'status-pill ' + state;
-  el.textContent = state === 'connected' ? '● database connected'
-                 : state === 'error'     ? '● connection failed'
-                 : 'connecting…';
-}
+// ── localStorage keys ──────────────────────────────────────────────────
+var LS = {
+  name:    'f13ld.ingest.contributor.name',
+  contact: 'f13ld.ingest.contributor.contact',
+  notes:   'f13ld.ingest.contributor.notes'
+};
 
-// ─── Logging ─────────────────────────────────────────────────────
+// ── Logging ────────────────────────────────────────────────────────────
 function log(type, msg) {
-  const body = document.getElementById('logBody');
-  const now  = new Date().toTimeString().slice(0, 8);
-  const line = document.createElement('div');
-  line.className = `log-line ${type}`;
-  line.innerHTML = `<span class="log-time">${now}</span><span class="log-msg">${msg}</span>`;
+  var body = document.getElementById('logBody');
+  var now  = new Date().toTimeString().slice(0, 8);
+  var line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  var t = document.createElement('span');
+  t.className = 'log-time';
+  t.textContent = now;
+  var m = document.createElement('span');
+  m.className = 'log-msg';
+  m.textContent = msg;
+  line.appendChild(t);
+  line.appendChild(m);
   body.appendChild(line);
   body.scrollTop = body.scrollHeight;
+  // Drop the placeholder line if it's still there
   if (body.children.length > 1 && body.children[0].querySelector('.log-time')?.textContent === '—') {
     body.children[0].remove();
   }
   document.getElementById('logBadge').textContent = type === 'error' ? 'error' : 'active';
 }
 
-// ─── SHA-256 content hash ─────────────────────────────────────────
-// Deterministic fingerprint of a design's geometry + surface terms.
-// Used to detect duplicates before inserting.
-async function contentHash(design) {
-  const g = design.geometry || {};
-  const fingerprint = JSON.stringify({
-    preset:      design.meta?.preset || '',
-    mode:        g.mode || '',
-    cell_scale:  g.cell_scale || 0,
-    pipe_radius: g.pipe_radius || null,
-    phase_shift: g.phase_shift
-      ? [g.phase_shift.x, g.phase_shift.y, g.phase_shift.z]
-      : null,
-    offset:      g.offset ?? null,
-    terms:       (design.surface?.terms || []).map(t => ({
-      coef:    t.coef,
-      factors: t.factors.map(f => ({ trig: f.trig, fx: f.fx, fy: f.fy, fz: f.fz }))
-    }))
-  });
-  const buf    = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fingerprint));
-  const bytes  = Array.from(new Uint8Array(buf));
-  return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+// ── Connection check ───────────────────────────────────────────────────
+function setStatus(state, title) {
+  var pill = document.getElementById('dbStatus');
+  pill.className = 'fh-status ' + state;
+  if (title) pill.title = title;
 }
 
-// ─── Physics plausibility validation ─────────────────────────────
-// Catches random data that happens to have the right JSON keys.
-function validatePhysics(d, meta) {
-  const m = d.metrics;
-  if (!m) return 'missing metrics block';
+async function checkConnection() {
+  setStatus('connecting', 'Connecting to F13LD.vault…');
+  try {
+    var res = await fetch(
+      SUPABASE_URL + '/rest/v1/' + TABLE + '?select=id&limit=1',
+      { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } }
+    );
+    if (res.ok) {
+      dbConnected = true;
+      setStatus('connected', 'Connected to F13LD.vault');
+      log('success', 'Connected to F13LD.vault database (' + TABLE + ')');
+    } else {
+      dbConnected = false;
+      setStatus('error', 'F13LD.vault returned HTTP ' + res.status);
+      log('error', 'Database connection failed: HTTP ' + res.status);
+    }
+  } catch (e) {
+    dbConnected = false;
+    setStatus('error', 'Cannot reach F13LD.vault: ' + e.message);
+    log('error', 'Cannot reach Supabase: ' + e.message);
+  }
+  refreshGates();
+}
 
-  // Volume fraction: must be physically meaningful
-  if (m.volume_fraction <= 0 || m.volume_fraction >= 75)
-    return `volume_fraction ${m.volume_fraction}% out of range (0–75%)`;
+// ── Contributor persistence ────────────────────────────────────────────
+function loadContributor() {
+  try {
+    var n = localStorage.getItem(LS.name);
+    var c = localStorage.getItem(LS.contact);
+    var nt = localStorage.getItem(LS.notes);
+    if (n)  document.getElementById('cName').value    = n;
+    if (c)  document.getElementById('cContact').value = c;
+    if (nt) document.getElementById('cNotes').value   = nt;
+  } catch (e) { /* localStorage may be unavailable in private mode */ }
+}
+function saveContributor() {
+  try {
+    localStorage.setItem(LS.name,    document.getElementById('cName').value.trim());
+    localStorage.setItem(LS.contact, document.getElementById('cContact').value.trim());
+    localStorage.setItem(LS.notes,   document.getElementById('cNotes').value.trim());
+  } catch (e) { /* ignore */ }
+}
+function onContribInput() {
+  saveContributor();
+  refreshGates();
+}
+function onCtxInput()    { refreshGates(); }
+function onLicenseChange() { refreshGates(); }
 
-  // Connectivity: connect_idx must be 0, 0.33, 0.67, or 1.0
-  const validKappa = [0, 0.33, 0.34, 0.67, 1.0];
-  if (!validKappa.some(v => Math.abs(m.connect_idx - v) < 0.02))
-    return `connect_idx ${m.connect_idx} is not a valid value (0, 0.33, 0.67, 1.0)`;
+// ── Gate logic — what's allowed when ───────────────────────────────────
+function getContributor() {
+  return {
+    name:    document.getElementById('cName').value.trim(),
+    contact: document.getElementById('cContact').value.trim(),
+    notes:   document.getElementById('cNotes').value.trim()
+  };
+}
+function getContext() {
+  var eVal = document.getElementById('cESolid').value.trim();
+  return {
+    domain:      document.getElementById('cDomain').value.trim(),
+    material:    document.getElementById('cMaterial').value.trim(),
+    e_solid_gpa: eVal === '' ? null : parseFloat(eVal)
+  };
+}
+function isContribReady() {
+  var c = getContributor();
+  return c.name.length > 0 && c.contact.length > 0;
+}
+function isCtxReady() {
+  var x = getContext();
+  return x.domain.length > 0 && x.material.length > 0;
+}
+function isLicensed() {
+  return document.getElementById('cLicense').checked;
+}
 
-  // Stiffness: connected axes must have E > 0, disconnected must be 0
-  const axes = [m.Ex_GPa, m.Ey_GPa, m.Ez_GPa];
-  const connectedCount = axes.filter(e => e > 1e-4).length;
-  const expectedKappa  = +(connectedCount / 3).toFixed(2);
-  if (Math.abs(expectedKappa - m.connect_idx) > 0.02)
-    return `connect_idx ${m.connect_idx} inconsistent with Ex/Ey/Ez (expected ${expectedKappa})`;
+function refreshGates() {
+  var contribOK = isContribReady();
+  var ctxOK     = isCtxReady();
+  var licOK     = isLicensed();
 
-  // Anisotropy: must be ≥ 1
-  if (m.anisotropy < 1.0)
-    return `anisotropy ${m.anisotropy} < 1 (impossible)`;
+  // Update card badges
+  document.getElementById('contribStatus').textContent = contribOK ? 'ready' : 'required';
+  document.getElementById('contribStatus').style.color = contribOK ? 'var(--primary)' : '';
+  document.getElementById('ctxStatus').textContent     = ctxOK ? 'ready' : 'required';
+  document.getElementById('ctxStatus').style.color     = ctxOK ? 'var(--primary)' : '';
 
-  // Anisotropy consistency with directional stiffnesses
-  const connected = axes.filter(e => e > 1e-4);
-  if (connected.length >= 2) {
-    const computedAniso = Math.max(...connected) / Math.min(...connected);
-    if (Math.abs(computedAniso - m.anisotropy) / computedAniso > 0.25)
-      return `anisotropy ${m.anisotropy.toFixed(2)} inconsistent with Ex/Ey/Ez (computed ${computedAniso.toFixed(2)})`;
+  // Drop zone is gated only on the database connection.
+  // Contributor / context / license can be filled in any order.
+  var dz = document.getElementById('dropZone');
+  if (dbConnected) {
+    dz.classList.remove('disabled');
+    if (!parsedFile) {
+      document.getElementById('dropTitle').textContent = 'Drop a sweep export JSON to begin';
+      document.getElementById('dropSub').textContent   = 'F13LD.sweep export · TPMS · Noise · Grain';
+    }
+  } else {
+    dz.classList.add('disabled');
+    document.getElementById('dropTitle').textContent = 'Database unreachable — cannot upload';
+    document.getElementById('dropSub').textContent   = 'Check the vault status pill in the header';
   }
 
-  // Preset: warn but don't reject — display names vary between Builder versions
-  // Validation relies on surface terms presence, not preset name matching
-  const preset = d.design?.meta?.preset || meta?.preset;
-  if (preset && preset.trim() === '')
-    return 'empty preset name';
+  // Insert button gates on everything the row needs.
+  var insertBtn = document.getElementById('insertBtn');
+  if (insertBtn) {
+    var nValid = processedRows.filter(function(p){ return p.status === 'valid'; }).length;
+    var ready  = contribOK && ctxOK && licOK && dbConnected && nValid > 0;
+    insertBtn.disabled = !ready;
 
-  // Surface terms: must be present and non-empty
-  if (!d.design?.surface?.terms?.length)
-    return 'missing surface terms — cannot reconstruct';
+    // Status line under the action bar tells the user what's still needed.
+    var statusEl = document.getElementById('actionStatus');
+    if (statusEl && parsedFile) {
+      if (ready) {
+        var ctxVals = getContext();
+        var contrib = getContributor();
+        statusEl.textContent = ctxVals.domain + ' · ' + ctxVals.material + ' · contrib: ' + contrib.name;
+        statusEl.style.color = '';
+      } else {
+        var missing = [];
+        if (!contribOK) missing.push('contributor');
+        if (!ctxOK)     missing.push('domain/material');
+        if (!licOK)     missing.push('license');
+        if (nValid === 0) missing.push('valid designs');
+        statusEl.textContent = 'needs: ' + missing.join(' · ');
+        statusEl.style.color = 'var(--warn)';
+      }
+    }
+  }
+}
+
+// ── Canonical JSON for hashing (stable key order) ──────────────────────
+function canonicalize(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(canonicalize).join(',') + ']';
+  var keys = Object.keys(v).sort();
+  return '{' + keys.map(function(k){
+    return JSON.stringify(k) + ':' + canonicalize(v[k]);
+  }).join(',') + '}';
+}
+
+async function contentHash(recipe) {
+  var json = canonicalize(recipe);
+  var buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(json));
+  return Array.from(new Uint8Array(buf))
+    .map(function(b){ return b.toString(16).padStart(2, '0'); })
+    .join('');
+}
+
+// ── Per-family validation ──────────────────────────────────────────────
+// Returns null if valid, otherwise a short reason string.
+//
+// IMPORTANT: per-design metrics live in `d.browser`, not `design.homogenization`.
+// The homogenization block in the recipe currently mirrors the *base* recipe's
+// MIL-HS values across every iteration — it's not per-design until the next
+// Sweep version computes Gxy/nu_eff/surface_complexity per iteration.
+function validateDesign(d) {
+  var design = d.design;
+  if (!design)        return 'missing design block';
+  if (!design.family) return 'missing family discriminator';
+  if (KNOWN_FAMILIES.indexOf(design.family) < 0)
+    return 'unknown family "' + design.family + '"';
+
+  var b = d.browser;
+  if (!b) return 'missing browser metrics block (per-design Ex/Ey/Ez/VF)';
+
+  // ── Universal physics — all checks against per-design browser values ─
+  if (typeof b.volume_fraction !== 'number')
+    return 'volume_fraction missing or non-numeric';
+  if (b.volume_fraction <= VF_MIN || b.volume_fraction >= VF_MAX)
+    return 'VF ' + b.volume_fraction.toFixed(2) + '% out of range (' + VF_MIN + '–' + VF_MAX + '%)';
+
+  if (typeof b.anisotropy !== 'number')
+    return 'anisotropy missing or non-numeric';
+  if (b.anisotropy < 1.0 - 0.005)
+    return 'anisotropy ' + b.anisotropy.toFixed(2) + ' < 1.0 (impossible)';
+
+  var axes = ['Ex_GPa', 'Ey_GPa', 'Ez_GPa'];
+  for (var i = 0; i < axes.length; i++) {
+    var v = b[axes[i]];
+    if (typeof v !== 'number') return axes[i] + ' missing or non-numeric';
+    if (v < 0)                 return axes[i] + ' = ' + v + ' (negative — impossible)';
+  }
+
+  // Anisotropy consistency — only enforced where ≥ 2 axes are connected.
+  var connected = axes.map(function(a){ return b[a]; }).filter(function(e){ return e > 1e-4; });
+  if (connected.length >= 2) {
+    var computed = Math.max.apply(null, connected) / Math.min.apply(null, connected);
+    if (Math.abs(computed - b.anisotropy) / Math.max(computed, 0.001) > 0.30)
+      return 'anisotropy ' + b.anisotropy.toFixed(2) + ' inconsistent with E_x/E_y/E_z (computed ' + computed.toFixed(2) + ')';
+  }
+
+  // ── Family-specific recipe structure (still on the recipe, not browser) ─
+  if (design.family === 'tpms') {
+    if (!design.surface) return 'TPMS missing surface block';
+    if (design.surface.type === 'terms' && (!Array.isArray(design.surface.terms) || design.surface.terms.length === 0))
+      return 'TPMS surface.terms is empty — not reconstructable';
+  }
+  if (design.family === 'noise') {
+    if (!design.surface) return 'noise missing surface block';
+    if (!design.surface.noise_type) return 'noise missing noise_type';
+  }
+  if (design.family === 'grain') {
+    if (!design.field) return 'grain missing field block';
+    if (!design.field.type) return 'grain missing field.type';
+  }
+
+  if (!design.geometry) return 'missing geometry block';
 
   return null; // valid
 }
 
-// ─── File processing ──────────────────────────────────────────────
+// ── Build the row that gets POSTed to Supabase ─────────────────────────
+function buildRow(d, hash, meta, contributor, context, sweepContext) {
+  var design  = d.design;
+  var h       = design.homogenization || {};
+  var browser = d.browser || {};
+
+  // User input always wins for the indexed text columns (so contributor
+  // can refine "biomedical" → "orthopedic_spine_l4l5"). The full sweep
+  // context block is preserved alongside in the `context` jsonb column.
+
+  return {
+    content_hash:        hash,
+    family:              design.family,
+
+    source_tool:         meta.tool         || null,
+    source_version:      meta.tool_version || meta.version || null,
+    exported_at:         meta.exported     || null,
+    preset:              design.meta?.preset || meta.preset || null,
+    solver:              meta.solver       || null,
+
+    contributor_name:    contributor.name,
+    contributor_contact: contributor.contact,
+    contributor_notes:   contributor.notes || null,
+
+    domain:              context.domain,
+    material:            context.material,
+    e_solid_gpa:         context.e_solid_gpa != null ? context.e_solid_gpa : (h.E_solid_GPa ?? null),
+    context:             sweepContext || null,
+
+    // Per-design primary metrics (from browser block, also mirrored in
+    // the per-design homogenization block since Sweep v0.10).
+    volume_fraction:     browser.volume_fraction ?? null,
+    ex_gpa:              browser.Ex_GPa          ?? null,
+    ey_gpa:              browser.Ey_GPa          ?? null,
+    ez_gpa:              browser.Ez_GPa          ?? null,
+    anisotropy:          browser.anisotropy      ?? null,
+
+    // Per-design derived metrics (from browser)
+    stiffness_density:   browser.stiffness_density ?? null,
+    aniso_efficiency:    browser.aniso_efficiency  ?? null,
+    axial_dominance:     browser.axial_dominance   ?? null,
+    ortho_contrast:      browser.ortho_contrast    ?? null,
+
+    // Connectivity & load path
+    connect_idx:         browser.connect_idx       ?? null,
+    perc_idx:            browser.perc_idx          ?? null,
+    stiff_axis:          browser.stiff_axis        ?? null,
+    load_path_eff:       browser.load_path_eff     ?? null,
+
+    // Strain energy & directional microstrain
+    u_strain:            browser.U_strain          ?? null,
+    microstrain_x:       browser.microstrain_x     ?? null,
+    microstrain_y:       browser.microstrain_y     ?? null,
+    microstrain_z:       browser.microstrain_z     ?? null,
+    microstrain_avg:     browser.microstrain_avg   ?? null,
+
+    // Thermal
+    keff_x:              browser.keff_x            ?? null,
+    keff_y:              browser.keff_y            ?? null,
+    keff_z:              browser.keff_z            ?? null,
+    thermal_anisotropy:  browser.thermal_anisotropy ?? null,
+    k_density:           browser.k_density         ?? null,
+
+    // Pore network
+    pore_size:           browser.pore_size         ?? null,
+    throat_size:         browser.throat_size       ?? null,
+    throat_efficiency:   browser.throat_efficiency ?? null,
+
+    // Reserved — currently NULL until Sweep computes them per iteration.
+    gxy_gpa:             null,
+    nu_eff:              null,
+    surface_complexity:  null,
+
+    recipe:              design,
+    license:             LICENSE_TAG
+  };
+}
+
+// ── File processing ────────────────────────────────────────────────────
 async function processFile(file) {
-  log('accent', `Loading ${file.name}…`);
+  log('accent', 'Loading ' + file.name + '…');
   document.getElementById('logBadge').textContent = 'validating';
 
-  let json;
+  var json;
   try {
-    const text = await file.text();
+    var text = await file.text();
     json = JSON.parse(text);
-  } catch(e) {
-    log('error', `Failed to parse JSON: ${e.message}`);
+  } catch (e) {
+    log('error', 'Failed to parse JSON: ' + e.message);
     return;
   }
 
-  if (!json.meta || !json.designs || !Array.isArray(json.designs)) {
-    log('error', 'Invalid sweep export — missing meta or designs array');
+  if (!json.meta || !Array.isArray(json.designs)) {
+    log('error', 'Invalid sweep export — missing meta or designs[] array');
     return;
   }
 
   parsedFile = json;
-  const meta = json.meta;
-  log('info', `File: ${file.name} · preset: ${meta.preset} · domain: ${meta.domain} · ${json.designs.length} designs`);
+  var meta = json.meta;
+  log('info', 'File: ' + file.name + ' · tool: ' + (meta.tool || '?') +
+              ' v' + (meta.tool_version || meta.version || '?') +
+              ' · ' + json.designs.length + ' designs');
+
+  // ── Auto-fill from the sweep `context` block (new in Sweep v0.10+) ───
+  // Falls back to design-level / file-level paths for older exports.
+  var ctx = json.context || {};
+
+  // Domain
+  var domainAuto = ctx.domain ||
+                   (json.designs[0]?.design?.domain) ||
+                   (json.designs[0]?.design?.meta && json.designs[0].design.meta.domain) ||
+                   meta.domain || null;
+  if (domainAuto) {
+    var dField = document.getElementById('cDomain');
+    if (dField.value.trim() === '') {
+      dField.value = domainAuto;
+      log('info', 'Domain auto-detected from sweep context: ' + domainAuto);
+      onCtxInput();
+    }
+  }
+
+  // Material — handle both legacy string and new structured object
+  var matRaw = ctx.material;
+  var materialAuto = null;
+  if (typeof matRaw === 'string') {
+    materialAuto = matRaw;
+  } else if (matRaw && typeof matRaw === 'object') {
+    materialAuto = matRaw.key || null;
+  }
+  if (materialAuto) {
+    var mField = document.getElementById('cMaterial');
+    if (mField.value.trim() === '') {
+      mField.value = materialAuto;
+      var extra = (matRaw && typeof matRaw === 'object' && matRaw.E_GPa)
+        ? ' (E=' + matRaw.E_GPa + ' GPa, ν=' + (matRaw.nu ?? '?') + ')'
+        : '';
+      log('info', 'Material auto-detected from sweep context: ' + materialAuto + extra);
+      onCtxInput();
+    }
+  }
+
+  // E_solid — prefer material.E_GPa from context, then per-design homog,
+  // then base recipe block.
+  var eField = document.getElementById('cESolid');
+  if (eField.value.trim() === '') {
+    var eAuto = (matRaw && typeof matRaw === 'object' ? matRaw.E_GPa : null) ||
+                json.designs[0]?.design?.homogenization?.E_solid_GPa ||
+                json.base?.E_solid_GPa || null;
+    if (eAuto) {
+      eField.value = eAuto;
+      log('info', 'E_solid auto-filled: ' + eAuto + ' GPa');
+    }
+  }
+
+  var contributor = getContributor();
+  var context     = getContext();
 
   // Fetch existing hashes to detect duplicates
-  log('info', 'Fetching existing content hashes from database…');
-  let existingHashes = new Set();
+  log('info', 'Checking for duplicates against F13LD.vault…');
+  var existingHashes = new Set();
   try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/${TABLE}?select=content_hash`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    var res = await fetch(
+      SUPABASE_URL + '/rest/v1/' + TABLE + '?select=content_hash',
+      { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } }
     );
     if (res.ok) {
-      const rows = await res.json();
-      rows.forEach(r => existingHashes.add(r.content_hash));
-      log('info', `${existingHashes.size} existing records in database`);
+      var rows = await res.json();
+      rows.forEach(function(r){ existingHashes.add(r.content_hash); });
+      log('info', existingHashes.size + ' designs already in F13LD.vault');
     }
-  } catch(e) {
-    log('warn', `Could not fetch existing hashes: ${e.message}`);
+  } catch (e) {
+    log('warn', 'Could not fetch existing hashes: ' + e.message);
   }
 
   // Process each design
   processedRows = [];
-  let nValid = 0, nDupe = 0, nInvalid = 0;
+  var nValid = 0, nDupe = 0, nInvalid = 0;
+  var familyCounts = { tpms: 0, noise: 0, grain: 0 };
 
-  for (const d of json.designs) {
-    // Structure check
-    if (!d.metrics || !d.design) {
-      processedRows.push({ status: 'invalid', reason: 'missing metrics or design block', d });
+  for (var i = 0; i < json.designs.length; i++) {
+    var d = json.designs[i];
+
+    var reason = validateDesign(d);
+    if (reason) {
+      processedRows.push({ status: 'invalid', reason: reason, d: d });
       nInvalid++;
       continue;
     }
 
-    // Physics check
-    const physicsError = validatePhysics(d, meta);
-    if (physicsError) {
-      processedRows.push({ status: 'invalid', reason: physicsError, d });
-      nInvalid++;
-      continue;
-    }
-
-    // Content hash + duplicate check
-    const hash = await contentHash(d.design);
+    var hash = await contentHash(d.design);
     if (existingHashes.has(hash)) {
-      processedRows.push({ status: 'dupe', reason: 'already in database', hash, d });
+      processedRows.push({ status: 'dupe', reason: 'already in F13LD.vault', hash: hash, d: d });
       nDupe++;
       continue;
     }
 
-    // Build the database row
-    const g = d.design.geometry || {};
-    const m = d.metrics;
-    const row = {
-      exported_at:   meta.exported || null,
-      preset:        d.design.meta?.preset || meta.preset || 'unknown',
-      mode:          g.mode || meta.mode || 'unknown',
-      domain:        meta.domain   || 'general',
-      material:      meta.material || 'agnostic',
-      e_solid_gpa:   meta.E_solid_GPa || 100,
-      cell_scale:    g.cell_scale  || null,
-      pipe_radius:   g.pipe_radius || null,
-      phase_shift:   g.phase_shift || null,
-      normal_weights: g.normal_weights || null,
-      // Metrics (postgres lowercased all column names)
-      ex_gpa:             m.Ex_GPa,
-      ey_gpa:             m.Ey_GPa,
-      ez_gpa:             m.Ez_GPa,
-      anisotropy:         m.anisotropy,
-      volume_fraction:    m.volume_fraction,
-      stiffness_density:  m.stiffness_density,
-      aniso_efficiency:   m.aniso_efficiency,
-      axial_dominance:    m.axial_dominance,
-      ortho_contrast:     m.ortho_contrast,
-      load_path_eff:      m.load_path_eff,
-      stiff_axis:         m.stiff_axis,
-      connect_idx:        m.connect_idx,
-      keff_x:             m.keff_x,
-      keff_y:             m.keff_y,
-      keff_z:             m.keff_z,
-      thermal_anisotropy: m.thermal_anisotropy,
-      k_density:          m.k_density,
-      u_strain:           m.U_strain,
-      microstrain_x:      m.microstrain_x,
-      microstrain_y:      m.microstrain_y,
-      microstrain_z:      m.microstrain_z,
-      microstrain_avg:    m.microstrain_avg,
-      pore_size:          m.pore_size,
-      throat_size:        m.throat_size,
-      perc_idx:           m.perc_idx,
-      surface_complexity: m.surface_complexity,
-      // Reconstruction
-      surface_terms: d.design.surface?.terms || [],
-      geometry:      g,
-      content_hash:  hash,
-    };
-
-    processedRows.push({ status: 'valid', row, d });
+    var row = buildRow(d, hash, meta, contributor, context, json.context || null);
+    processedRows.push({ status: 'valid', row: row, d: d, hash: hash });
     existingHashes.add(hash); // prevent intra-file dupes
+    familyCounts[d.design.family] = (familyCounts[d.design.family] || 0) + 1;
     nValid++;
   }
 
-  // Summary
   log(nInvalid > 0 ? 'warn' : 'success',
-    `Validation complete — ${nValid} valid · ${nDupe} duplicates · ${nInvalid} invalid`);
+      'Validated — ' + nValid + ' valid · ' + nDupe + ' duplicates · ' + nInvalid + ' invalid');
 
+  if (nValid > 0) {
+    var famSummary = Object.keys(familyCounts)
+      .filter(function(k){ return familyCounts[k] > 0; })
+      .map(function(k){ return familyCounts[k] + ' ' + k; })
+      .join(' · ');
+    log('info', 'Families: ' + famSummary);
+  }
+
+  // ── Update UI ────────────────────────────────────────────────────────
   document.getElementById('sumTotal').textContent   = json.designs.length;
   document.getElementById('sumValid').textContent   = nValid;
   document.getElementById('sumDupes').textContent   = nDupe;
   document.getElementById('sumInvalid').textContent = nInvalid;
   document.getElementById('summaryGrid').style.display = 'grid';
 
-  // Preview table
   renderPreview();
 
   document.getElementById('previewPanel').style.display = 'block';
   document.getElementById('actionBar').style.display    = 'flex';
   document.getElementById('dropZone').classList.add('loaded');
+  document.getElementById('dropTitle').textContent = file.name;
+  document.getElementById('dropSub').textContent   = 'Loaded · drop another to replace';
 
-  const insertBtn = document.getElementById('insertBtn');
+  var insertBtn = document.getElementById('insertBtn');
   if (nValid > 0) {
-    insertBtn.disabled = false;
-    insertBtn.textContent = `↑ Insert ${nValid} design${nValid !== 1 ? 's' : ''} to ScaffoldVault`;
+    insertBtn.textContent = '↑ Insert ' + nValid + ' design' + (nValid !== 1 ? 's' : '') + ' to F13LD.vault';
   } else {
-    insertBtn.disabled = true;
     insertBtn.textContent = '↑ Nothing to insert';
   }
 
-  document.getElementById('actionStatus').textContent =
-    `${meta.preset} · ${meta.domain} · ${meta.material || 'agnostic'}`;
   document.getElementById('logBadge').textContent = 'ready';
+
+  refreshGates();
 }
 
+// ── Preview rendering ──────────────────────────────────────────────────
 function renderPreview() {
-  const tbody = document.getElementById('previewBody');
+  var tbody = document.getElementById('previewBody');
   tbody.innerHTML = '';
 
-  processedRows.forEach(pr => {
-    const d = pr.d;
-    const m = d.metrics || {};
-    const g = d.design?.geometry || {};
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><span class="status-badge ${pr.status}">${pr.status}</span></td>
-      <td>${d.id ?? '—'}</td>
-      <td>${parsedFile.meta?.preset || '—'}</td>
-      <td>${parsedFile.meta?.domain || '—'}</td>
-      <td>${parsedFile.meta?.material || '—'}</td>
-      <td>${g.mode || '—'}</td>
-      <td>${m.volume_fraction?.toFixed(2) ?? '—'}</td>
-      <td>${m.anisotropy?.toFixed(2) ?? '—'}</td>
-      <td>${m.Ex_GPa?.toFixed(2) ?? '—'}</td>
-      <td>${m.Ey_GPa?.toFixed(2) ?? '—'}</td>
-      <td>${m.Ez_GPa?.toFixed(2) ?? '—'}</td>
-      <td>${m.connect_idx?.toFixed(2) ?? '—'}</td>
-      <td>${m.pore_size ?? '—'}</td>
-      <td>${g.pipe_radius?.toFixed(3) ?? '—'}</td>
-      <td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis">${pr.reason || ''}</td>
-    `;
+  processedRows.forEach(function(pr) {
+    var d = pr.d;
+    var design = d.design || {};
+    var b = d.browser || {};   // per-design metrics
+    var family = design.family || '—';
+
+    var preset = (design.meta && design.meta.preset) ||
+                 (design.surface && design.surface.noise_type) ||
+                 (design.field && design.field.type) || '—';
+
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><span class="status-badge ' + pr.status + '">' + pr.status + '</span></td>' +
+      '<td>' + (d.id ?? '—') + '</td>' +
+      '<td><span class="family-pill ' + family + '">' + family + '</span></td>' +
+      '<td>' + escapeHTML(String(preset)) + '</td>' +
+      '<td>' + (typeof b.volume_fraction === 'number' ? b.volume_fraction.toFixed(2) : '—') + '</td>' +
+      '<td>' + (typeof b.anisotropy === 'number' ? b.anisotropy.toFixed(2) : '—') + '</td>' +
+      '<td>' + (typeof b.Ex_GPa === 'number' ? b.Ex_GPa.toFixed(2) : '—') + '</td>' +
+      '<td>' + (typeof b.Ey_GPa === 'number' ? b.Ey_GPa.toFixed(2) : '—') + '</td>' +
+      '<td>' + (typeof b.Ez_GPa === 'number' ? b.Ez_GPa.toFixed(2) : '—') + '</td>' +
+      '<td>' + (typeof b.stiffness_density === 'number' ? b.stiffness_density.toFixed(1) : '—') + '</td>' +
+      '<td style="color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis">' + escapeHTML(pr.reason || '') + '</td>';
     tbody.appendChild(tr);
   });
 
-  document.getElementById('previewBadge').textContent = `${processedRows.length} designs`;
+  document.getElementById('previewBadge').textContent = processedRows.length + ' designs';
 }
 
-// ─── Insert ───────────────────────────────────────────────────────
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, function(c){
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+
+// ── Insert ─────────────────────────────────────────────────────────────
 async function runInsert() {
-  const validRows = processedRows.filter(p => p.status === 'valid').map(p => p.row);
+  if (!isLicensed()) {
+    log('error', 'License acknowledgment is required.');
+    return;
+  }
+  var validRows = processedRows
+    .filter(function(p){ return p.status === 'valid'; })
+    .map(function(p){ return p.row; });
   if (validRows.length === 0) return;
 
-  document.getElementById('insertBtn').disabled = true;
-  document.getElementById('insertBtn').textContent = '⏳ Inserting…';
+  var insertBtn = document.getElementById('insertBtn');
+  insertBtn.disabled    = true;
+  insertBtn.textContent = '⏳ Inserting…';
   document.getElementById('progressWrap').classList.add('visible');
 
-  log('accent', `Inserting ${validRows.length} designs in batches of ${BATCH_SIZE}…`);
+  log('accent', 'Inserting ' + validRows.length + ' designs in batches of ' + BATCH_SIZE + '…');
 
-  let inserted = 0;
-  let failed   = 0;
+  var inserted = 0, failed = 0;
 
-  for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
-    const batch = validRows.slice(i, i + BATCH_SIZE);
+  for (var i = 0; i < validRows.length; i += BATCH_SIZE) {
+    var batch = validRows.slice(i, i + BATCH_SIZE);
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/${TABLE}`,
+      var res = await fetch(
+        SUPABASE_URL + '/rest/v1/' + TABLE,
         {
           method: 'POST',
           headers: {
             apikey:        SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
+            Authorization: 'Bearer ' + SUPABASE_KEY,
             'Content-Type': 'application/json',
             Prefer:        'return=minimal'
           },
@@ -873,36 +1269,36 @@ async function runInsert() {
       );
       if (res.ok) {
         inserted += batch.length;
-        log('info', `Batch ${Math.floor(i/BATCH_SIZE)+1} — inserted ${batch.length} rows`);
+        log('info', 'Batch ' + (Math.floor(i / BATCH_SIZE) + 1) + ' — inserted ' + batch.length + ' rows');
       } else {
-        const err = await res.text();
+        var errText = await res.text();
         failed += batch.length;
-        log('error', `Batch ${Math.floor(i/BATCH_SIZE)+1} failed: ${err.slice(0, 120)}`);
+        log('error', 'Batch ' + (Math.floor(i / BATCH_SIZE) + 1) + ' failed: ' + errText.slice(0, 160));
       }
-    } catch(e) {
+    } catch (e) {
       failed += batch.length;
-      log('error', `Batch ${Math.floor(i/BATCH_SIZE)+1} error: ${e.message}`);
+      log('error', 'Batch ' + (Math.floor(i / BATCH_SIZE) + 1) + ' error: ' + e.message);
     }
 
-    const pct = Math.round((i + BATCH_SIZE) / validRows.length * 100);
+    var pct = Math.round((i + BATCH_SIZE) / validRows.length * 100);
     document.getElementById('progressFill').style.width = Math.min(pct, 100) + '%';
   }
 
   document.getElementById('progressFill').style.width = '100%';
 
   if (failed === 0) {
-    log('success', `✓ ${inserted} designs inserted into ScaffoldVault`);
-    document.getElementById('insertBtn').textContent = `✓ ${inserted} inserted`;
+    log('success', '✓ ' + inserted + ' designs inserted into F13LD.vault');
+    insertBtn.textContent = '✓ ' + inserted + ' inserted';
     document.getElementById('logBadge').textContent = 'done';
   } else {
-    log('warn', `${inserted} inserted · ${failed} failed`);
-    document.getElementById('insertBtn').textContent = `⚠ ${inserted} inserted · ${failed} failed`;
-    document.getElementById('insertBtn').disabled = false;
+    log('warn', inserted + ' inserted · ' + failed + ' failed');
+    insertBtn.textContent = '⚠ ' + inserted + ' inserted · ' + failed + ' failed';
+    insertBtn.disabled = false;
     document.getElementById('logBadge').textContent = 'partial';
   }
 }
 
-// ─── Reset ────────────────────────────────────────────────────────
+// ── Reset ──────────────────────────────────────────────────────────────
 function resetTool() {
   parsedFile    = null;
   processedRows = [];
@@ -916,23 +1312,33 @@ function resetTool() {
   document.getElementById('logBadge').textContent = 'idle';
   document.getElementById('fileInput').value = '';
   log('info', 'Reset — drop a new sweep export to begin.');
+  refreshGates();
 }
 
-// ─── File input wiring ────────────────────────────────────────────
-document.getElementById('fileInput').addEventListener('change', e => {
+// ── File input wiring ──────────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', function(e) {
   if (e.target.files[0]) processFile(e.target.files[0]);
 });
 
-const dz = document.getElementById('dropZone');
-dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
-dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
-dz.addEventListener('drop', e => {
+var dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  if (!dz.classList.contains('disabled')) dz.classList.add('drag-over');
+});
+dz.addEventListener('dragleave', function() { dz.classList.remove('drag-over'); });
+dz.addEventListener('drop', function(e) {
   e.preventDefault();
   dz.classList.remove('drag-over');
+  if (dz.classList.contains('disabled')) {
+    log('warn', 'Database is unreachable — wait for the vault status pill to turn green.');
+    return;
+  }
   if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
 });
 
-// ─── Init ─────────────────────────────────────────────────────────
+// ── Init ───────────────────────────────────────────────────────────────
+loadContributor();
+refreshGates();
 checkConnection();
 </script>
 </body>
