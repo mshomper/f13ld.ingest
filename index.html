@@ -130,11 +130,15 @@ html,body{
   0%,100% { r:1.4; opacity:1; }
   50%     { r:2.2; opacity:0.5; }
 }
-/* Error state — broken/dashed wave, red */
+/* Error state — broken/dashed wave, red, clickable to retry */
 .fh-status.error{
   border-color:rgba(226,91,74,0.45);
   color:var(--error);
   background:rgba(226,91,74,0.07);
+  cursor:pointer;
+}
+.fh-status.error:hover{
+  background:rgba(226,91,74,0.14);
 }
 .fh-status.error .fh-wave-line{
   stroke-dasharray:2 2;
@@ -187,11 +191,37 @@ html,body{
 }
 .field-grid.full > .field{grid-column:1 / -1}
 .field{display:flex;flex-direction:column;gap:4px}
+.field-meta{
+  display:flex;align-items:center;gap:8px;
+  min-height:14px;
+}
 .field-label{
   font-size:10px;letter-spacing:0.1em;text-transform:uppercase;
   color:var(--muted);
 }
 .field-label .req{color:var(--neon);margin-left:3px}
+
+/* Auto-detect tag — appears when a context field was filled from the sweep file */
+.field-tag-auto{
+  font-size:10px;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--tool-mid);
+  display:none;
+}
+.field-tag-auto.visible{display:inline}
+
+/* Restore-to-detected button — companion to .field-tag-auto */
+.field-restore-btn{
+  background:none;border:none;padding:0;
+  color:var(--tool-mid);
+  font-size:13px;line-height:1;
+  cursor:pointer;
+  display:none;
+  transition:color 0.15s, transform 0.2s;
+  font-family:inherit;
+}
+.field-restore-btn.visible{display:inline}
+.field-restore-btn:hover{color:var(--neon);transform:rotate(-90deg);}
+
 .field input[type=text],
 .field input[type=email],
 .field input[type=number],
@@ -433,6 +463,9 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
   margin-left:auto;
   letter-spacing:0.04em;
 }
+.action-status.almost{color:var(--tool-mid);}
+.action-status.warn  {color:var(--warn);}
+.action-status.error {color:var(--error);}
 
 /* ── Progress bar ─────────────────────────────────────────────────────── */
 .progress-wrap{
@@ -499,7 +532,7 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
       </svg>
       <span class="fh-vault-label">vault</span>
     </div>
-    <span class="fh-version">v0.2.0</span>
+    <span class="fh-version">v0.7.0</span>
     <div class="fh-icon">
       <svg width="18" height="18" viewBox="0 0 40 40">
         <line x1="3" y1="9"  x2="16" y2="20" stroke="#3C3489" stroke-width="1.8" stroke-linecap="round"/>
@@ -627,21 +660,20 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
       <div class="intro">
         Where these designs are intended to live. Free text — be as specific as
         useful (e.g. <strong>orthopedic_spine</strong>, <strong>aerospace_heatshield</strong>).
-        Domain, material, and E_solid auto-fill from the sweep export when its
-        <code style="font-size:11px;color:var(--text);background:var(--panel-2);padding:1px 5px;border-radius:3px">context</code> block is present. You can override any value.
+        Domain auto-fills from the sweep export when its
+        <code style="font-size:11px;color:var(--text);background:var(--panel-2);padding:1px 5px;border-radius:3px">context</code>
+        block is present. The full material card (key, E, ν, k, yield strain)
+        flows through to the vault automatically — no manual entry needed.
       </div>
       <div class="field-grid">
-        <div class="field">
-          <label class="field-label" for="cDomain">Domain<span class="req">*</span></label>
-          <input type="text" id="cDomain" placeholder="auto-detected from sweep · or e.g. orthopedic" maxlength="80" oninput="onCtxInput()">
-        </div>
-        <div class="field">
-          <label class="field-label" for="cMaterial">Material<span class="req">*</span></label>
-          <input type="text" id="cMaterial" placeholder="auto-detected from sweep · or e.g. ti6al4v" maxlength="80" oninput="onCtxInput()">
-        </div>
         <div class="field" style="grid-column:1 / -1">
-          <label class="field-label" for="cESolid">E_solid (GPa) — Young's modulus of the solid material used in homogenization</label>
-          <input type="number" id="cESolid" placeholder="auto-detected from sweep context block" step="0.1" min="0" oninput="onCtxInput()">
+          <div class="field-meta">
+            <label class="field-label" for="cDomain">Domain<span class="req">*</span></label>
+            <span class="field-tag-auto" id="cDomainTag">auto</span>
+            <button type="button" class="field-restore-btn" id="cDomainRestore"
+                    title="Restore detected value" onclick="restoreField('cDomain')">↺</button>
+          </div>
+          <input type="text" id="cDomain" placeholder="auto-detected from sweep · or e.g. orthopedic" maxlength="80" oninput="onCtxInput('cDomain')">
         </div>
       </div>
     </div>
@@ -691,8 +723,13 @@ var BATCH_SIZE   = 50;
 var LICENSE_TAG  = 'CC0-1.0';
 
 // VF acceptance window (percent). Sparse PI-TPMS designs run < 2.5%.
-var VF_MIN = 1.25;
-var VF_MAX = 80.0;
+// Two-tier floor: anything > VF_MIN passes the volume floor, but designs
+// below VF_LOW_THRESHOLD must additionally be connected in ≥1 axis
+// (connect_idx ≥ MIN_CONNECT_IDX) to rule out disconnected powder.
+var VF_MIN           = 0.50;
+var VF_LOW_THRESHOLD = 1.25;
+var VF_MAX           = 80.0;
+var MIN_CONNECT_IDX  = 0.33;  // 1 of 3 axes — connect_idx scale {0, 0.33, 0.67, 1}
 
 var KNOWN_FAMILIES = ['tpms', 'noise', 'grain'];
 
@@ -700,6 +737,30 @@ var KNOWN_FAMILIES = ['tpms', 'noise', 'grain'];
 var parsedFile    = null;     // raw parsed JSON
 var processedRows = [];       // {status, row, reason, design}
 var dbConnected   = false;
+
+// Per-context-field "last detected" values from the most recent sweep file.
+// Used by the ↺ restore button and by the file-drop replace logic.
+// Keys map to input element IDs. Domain is the only UI-bound context field
+// since v0.5 — material/E_solid/sigma_ref/etc. now flow straight through
+// from the sweep file's context block to the row, no manual entry needed.
+var lastDetected = {
+  cDomain: null
+};
+
+// Headless caches of file-level provenance, populated on file drop and
+// consumed by buildRow. None of these are user-editable — they're
+// recorded as-is from the sweep export's context block.
+var lastDetectedMaterialProps = null;   // {key, E_GPa, nu, k_W_mK, eps_yield_um, linear_cap_kind}
+var lastDetectedSigmaRefGPa   = null;
+var lastDetectedCellSizeMm    = null;
+var lastDetectedVoxelToUm     = null;
+
+// Three-state model for the Domain field:
+//   ''       → empty, no detection has happened
+//   'auto'   → value came from a file's context block
+//   'edited' → user has typed or modified the value
+// Stored as data-source on the input. Helpers below read/write it.
+var CTX_FIELDS = ['cDomain'];
 
 // ── localStorage keys ──────────────────────────────────────────────────
 var LS = {
@@ -735,14 +796,22 @@ function log(type, msg) {
 function setStatus(state, title) {
   var pill = document.getElementById('dbStatus');
   pill.className = 'fh-status ' + state;
-  if (title) pill.title = title;
+  if (title) pill.title = (state === 'error' ? 'Click to retry — ' + title : title);
 }
+
+// Click-to-retry on the vault status pill (only fires in error state)
+document.getElementById('dbStatus').addEventListener('click', function() {
+  if (this.classList.contains('error')) {
+    log('info', 'Retrying F13LD.vault connection…');
+    checkConnection();
+  }
+});
 
 async function checkConnection() {
   setStatus('connecting', 'Connecting to F13LD.vault…');
   try {
     var res = await fetch(
-      SUPABASE_URL + '/rest/v1/' + TABLE + '?select=id&limit=1',
+      SUPABASE_URL + '/rest/v1/' + TABLE + '?select=content_hash&limit=1',
       { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } }
     );
     if (res.ok) {
@@ -784,8 +853,95 @@ function onContribInput() {
   saveContributor();
   refreshGates();
 }
-function onCtxInput()    { refreshGates(); }
+
+// ── Context field state machine ────────────────────────────────────────
+function getFieldSource(id) {
+  return document.getElementById(id).getAttribute('data-source') || '';
+}
+function setFieldSource(id, source) {
+  var el = document.getElementById(id);
+  if (source) el.setAttribute('data-source', source);
+  else        el.removeAttribute('data-source');
+  updateFieldChrome(id);
+}
+function updateFieldChrome(id) {
+  // "auto" tag: visible only when current value came from autofill.
+  // ↺ button: visible whenever there's a detected value to restore to —
+  //          most useful when the user has edited and wants to go back.
+  var source = getFieldSource(id);
+  var hasDetected = lastDetected[id] !== null && lastDetected[id] !== undefined;
+  document.getElementById(id + 'Tag').classList.toggle('visible',
+    source === 'auto' && hasDetected);
+  document.getElementById(id + 'Restore').classList.toggle('visible',
+    hasDetected);
+}
+
+// Apply a detected value: only replaces if the field isn't user-edited.
+// 'value' may be null/undefined — that means the new file has no value,
+// so we clear the field if it was previously auto, leave it alone if edited.
+function applyDetected(id, value) {
+  var source = getFieldSource(id);
+  if (source === 'edited') return;            // user wins
+  var el = document.getElementById(id);
+  if (value === null || value === undefined || value === '') {
+    el.value = '';
+    setFieldSource(id, '');
+  } else {
+    el.value = value;
+    setFieldSource(id, 'auto');
+  }
+}
+
+// User clicked the ↺ restore button — pull the cached detected value back.
+function restoreField(id) {
+  var detected = lastDetected[id];
+  if (detected === null || detected === undefined) return;
+  document.getElementById(id).value = detected;
+  setFieldSource(id, 'auto');
+  refreshGates();
+}
+
+function onCtxInput(id) {
+  if (id) {
+    // Any keystroke marks the field as user-edited unless the value
+    // happens to match the detected one (then it's still "auto").
+    var el = document.getElementById(id);
+    var v  = el.value.trim();
+    var detected = lastDetected[id];
+    var matchesDetected = detected !== null && detected !== undefined &&
+                          String(detected).trim() === v && v !== '';
+    if (matchesDetected) setFieldSource(id, 'auto');
+    else if (v === '')   setFieldSource(id, '');
+    else                 setFieldSource(id, 'edited');
+  }
+  refreshGates();
+}
 function onLicenseChange() { refreshGates(); }
+
+// ── Drop-zone file summary string ──────────────────────────────────────
+// e.g. "207 noise · ridged · sweep v0.10.0"  (single family + preset)
+//      "45 tpms · 32 noise · sweep v0.10.0" (mixed families, preset omitted)
+// Missing meta segments are skipped silently.
+function buildFileSummary(json) {
+  var meta = json.meta || {};
+  var counts = {};
+  (json.designs || []).forEach(function(d) {
+    var f = (d.design && d.design.family) || 'unknown';
+    counts[f] = (counts[f] || 0) + 1;
+  });
+  var famKeys = Object.keys(counts);
+  var famPart = famKeys
+    .map(function(k){ return counts[k] + ' ' + k; })
+    .join(' · ');
+  var parts = [];
+  if (famPart) parts.push(famPart);
+  // Preset only makes sense when one family is present
+  if (famKeys.length === 1 && meta.preset) parts.push(meta.preset);
+  if (meta.tool_version || meta.version) {
+    parts.push('sweep v' + (meta.tool_version || meta.version));
+  }
+  return parts.join(' · ');
+}
 
 // ── Gate logic — what's allowed when ───────────────────────────────────
 function getContributor() {
@@ -796,11 +952,11 @@ function getContributor() {
   };
 }
 function getContext() {
-  var eVal = document.getElementById('cESolid').value.trim();
+  // Domain is the only user-input context field. Material card and the
+  // file-level provenance (sigma_ref, cellSize, voxelToUm) flow through
+  // from the cached lastDetected* values populated on file drop.
   return {
-    domain:      document.getElementById('cDomain').value.trim(),
-    material:    document.getElementById('cMaterial').value.trim(),
-    e_solid_gpa: eVal === '' ? null : parseFloat(eVal)
+    domain: document.getElementById('cDomain').value.trim()
   };
 }
 function isContribReady() {
@@ -808,8 +964,7 @@ function isContribReady() {
   return c.name.length > 0 && c.contact.length > 0;
 }
 function isCtxReady() {
-  var x = getContext();
-  return x.domain.length > 0 && x.material.length > 0;
+  return getContext().domain.length > 0;
 }
 function isLicensed() {
   return document.getElementById('cLicense').checked;
@@ -851,19 +1006,28 @@ function refreshGates() {
     // Status line under the action bar tells the user what's still needed.
     var statusEl = document.getElementById('actionStatus');
     if (statusEl && parsedFile) {
+      // Reset color modifiers
+      statusEl.classList.remove('almost', 'warn', 'error');
+      statusEl.style.color = '';
       if (ready) {
         var ctxVals = getContext();
         var contrib = getContributor();
-        statusEl.textContent = ctxVals.domain + ' · ' + ctxVals.material + ' · contrib: ' + contrib.name;
-        statusEl.style.color = '';
+        var matLabel = (lastDetectedMaterialProps && lastDetectedMaterialProps.key)
+                       ? lastDetectedMaterialProps.key
+                       : '—';
+        statusEl.textContent = ctxVals.domain + ' · ' + matLabel + ' · contrib: ' + contrib.name;
+      } else if (nValid === 0 && parsedFile) {
+        // Hard blocker — file gave us nothing usable
+        statusEl.textContent = 'no valid designs to insert';
+        statusEl.classList.add('error');
       } else {
         var missing = [];
         if (!contribOK) missing.push('contributor');
-        if (!ctxOK)     missing.push('domain/material');
+        if (!ctxOK)     missing.push('domain');
         if (!licOK)     missing.push('license');
-        if (nValid === 0) missing.push('valid designs');
         statusEl.textContent = 'needs: ' + missing.join(' · ');
-        statusEl.style.color = 'var(--warn)';
+        // 1 thing → almost-ready (purple), 2+ things → warn (yellow)
+        statusEl.classList.add(missing.length === 1 ? 'almost' : 'warn');
       }
     }
   }
@@ -908,14 +1072,43 @@ function validateDesign(d) {
   if (typeof b.volume_fraction !== 'number')
     return 'volume_fraction missing or non-numeric';
   if (b.volume_fraction <= VF_MIN || b.volume_fraction >= VF_MAX)
-    return 'VF ' + b.volume_fraction.toFixed(2) + '% out of range (' + VF_MIN + '–' + VF_MAX + '%)';
+    return 'VF ' + b.volume_fraction.toFixed(2) + '% out of range (' + VF_MIN.toFixed(2) + '–' + VF_MAX + '%)';
+
+  // Sparse-VF connectivity floor: below VF_LOW_THRESHOLD, the design must
+  // be connected in at least one axis (otherwise it's disconnected powder).
+  if (b.volume_fraction < VF_LOW_THRESHOLD) {
+    var ci = b.connect_idx;
+    if (typeof ci !== 'number' || ci < MIN_CONNECT_IDX) {
+      var ciStr = (typeof ci === 'number') ? ci.toFixed(2) : '—';
+      return 'VF ' + b.volume_fraction.toFixed(2) + '% sparse — connect_idx ' +
+             ciStr + ' < ' + MIN_CONNECT_IDX + ' (need ≥1 connected axis)';
+    }
+  }
+
+  // ── Sweep schema version tripwire ───────────────────────────────────
+  // Vault schema v4 requires v0.13+ canonical metrics. Use fields that
+  // were ADDED in v0.13 (not present in v0.12) so a v0.12 export gets
+  // a clear rejection. H_mean_abs is the cleanest v0.13 marker.
+  if (typeof b.linear_cap_active !== 'boolean')
+    return 'missing linear_cap_active — Sweep v0.13+ required';
+  if (typeof b.stiffness_density_norm !== 'number')
+    return 'missing stiffness_density_norm — Sweep v0.13+ required';
+  if (typeof b.H_mean_abs !== 'number')
+    return 'missing H_mean_abs — Sweep v0.13+ required (this looks like a v0.12 export)';
+  if (typeof b.throat_ratio !== 'number')
+    return 'missing throat_ratio — Sweep v0.13+ required';
+  if (typeof b.tortuosity_x !== 'number')
+    return 'missing tortuosity_x — Sweep v0.13+ required';
 
   if (typeof b.anisotropy !== 'number')
     return 'anisotropy missing or non-numeric';
   if (b.anisotropy < 1.0 - 0.005)
     return 'anisotropy ' + b.anisotropy.toFixed(2) + ' < 1.0 (impossible)';
 
-  var axes = ['Ex_GPa', 'Ey_GPa', 'Ez_GPa'];
+  // Stiffness sanity — switched from Ex_GPa to Ex_norm in v0.7.0 since
+  // norm fields are guaranteed and the GPa fields are no longer stored.
+  // Same physics either way: negative stiffness is impossible.
+  var axes = ['Ex_norm', 'Ey_norm', 'Ez_norm'];
   for (var i = 0; i < axes.length; i++) {
     var v = b[axes[i]];
     if (typeof v !== 'number') return axes[i] + ' missing or non-numeric';
@@ -923,7 +1116,7 @@ function validateDesign(d) {
   }
 
   // Anisotropy consistency — only enforced where ≥ 2 axes are connected.
-  var connected = axes.map(function(a){ return b[a]; }).filter(function(e){ return e > 1e-4; });
+  var connected = axes.map(function(a){ return b[a]; }).filter(function(e){ return e > 1e-7; });
   if (connected.length >= 2) {
     var computed = Math.max.apply(null, connected) / Math.min.apply(null, connected);
     if (Math.abs(computed - b.anisotropy) / Math.max(computed, 0.001) > 0.30)
@@ -953,77 +1146,216 @@ function validateDesign(d) {
 // ── Build the row that gets POSTed to Supabase ─────────────────────────
 function buildRow(d, hash, meta, contributor, context, sweepContext) {
   var design  = d.design;
-  var h       = design.homogenization || {};
   var browser = d.browser || {};
 
-  // User input always wins for the indexed text columns (so contributor
-  // can refine "biomedical" → "orthopedic_spine_l4l5"). The full sweep
-  // context block is preserved alongside in the `context` jsonb column.
+  // ── Material card: jsonb carrying the full material as a unit ──────
+  // Pulled straight from the sweep context (cached on file drop). The
+  // ingest UI no longer asks the contributor to type material info —
+  // the file is the source of truth.
+  var materialCard = lastDetectedMaterialProps || null;
+
+  // ── Cap-affected NULL-ing ──────────────────────────────────────────
+  // When linear_cap_active === true, the compliance metrics come back
+  // pinned to the structural-foam ceiling and would skew histograms.
+  // NULL them here; the flag itself is preserved for audit. Geometry,
+  // stiffness, and thermal stay populated since the cap doesn't touch
+  // them. Pre-cap values remain recoverable from ex_norm × e_solid_gpa.
+  var capActive = browser.linear_cap_active === true;
+  function nullIfCapped(v) { return capActive ? null : (v ?? null); }
+
+  // ── Pore percentile normalization (μm → fraction-of-cell) ──────────
+  // Sweep emits pore_size_p10/p50/p90 in μm. Schema stores them on the
+  // same cell-invariant scale as pore_size_norm, so we divide here.
+  // Returns null if the source field is missing OR cell size is missing.
+  var cellUm = (lastDetectedCellSizeMm != null) ? lastDetectedCellSizeMm * 1000 : null;
+  function poreUmToNorm(umVal) {
+    if (typeof umVal !== 'number' || cellUm == null || cellUm <= 0) return null;
+    return umVal / cellUm;
+  }
+
+  // ── Transport rollups (per-axis → min/max/avg) ─────────────────────
+  // Returns null if any axis is missing — partial rollups would be misleading.
+  function tripleRollup(x, y, z, op) {
+    if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') return null;
+    if (op === 'min') return Math.min(x, y, z);
+    if (op === 'max') return Math.max(x, y, z);
+    if (op === 'avg') return (x + y + z) / 3;
+    return null;
+  }
+  var tortMin    = tripleRollup(browser.tortuosity_x, browser.tortuosity_y, browser.tortuosity_z, 'min');
+  var tortAvg    = tripleRollup(browser.tortuosity_x, browser.tortuosity_y, browser.tortuosity_z, 'avg');
+  var dEffMaxN   = tripleRollup(browser.D_eff_x_norm, browser.D_eff_y_norm, browser.D_eff_z_norm, 'max');
+  var dEffAvgN   = tripleRollup(browser.D_eff_x_norm, browser.D_eff_y_norm, browser.D_eff_z_norm, 'avg');
+  // v4: thermal rollups for the thermal Z-compound
+  var keffMaxN   = tripleRollup(browser.keff_x_norm, browser.keff_y_norm, browser.keff_z_norm, 'max');
+  var keffAvgN   = tripleRollup(browser.keff_x_norm, browser.keff_y_norm, browser.keff_z_norm, 'avg');
+
+  // ── Recognized field set — used to compute metrics_extended sidecar ─
+  // Anything in browser that ISN'T promoted to a first-class column
+  // and ISN'T a dimensional original (which we drop) lands in
+  // metrics_extended. This means future sweep versions can add new
+  // browser fields without an ingest update.
+  var FIRST_CLASS = {
+    // Geometry (load_path_eff dropped in v0.13)
+    volume_fraction:1, connect_idx:1, perc_idx:1, stiff_axis:1,
+    anisotropy:1, axial_dominance:1, ortho_contrast:1,
+    aniso_efficiency:1, surface_complexity:1,
+    // Stiffness — Es-decoupled
+    Ex_norm:1, Ey_norm:1, Ez_norm:1, stiffness_density_norm:1,
+    // Thermal — ks-decoupled
+    keff_x_norm:1, keff_y_norm:1, keff_z_norm:1, thermal_anisotropy:1,
+    // Compliance — load-decoupled
+    microstrain_x_per_GPa:1, microstrain_y_per_GPa:1, microstrain_z_per_GPa:1,
+    microstrain_avg_per_GPa:1, U_compliance:1,
+    // Pore — throat_efficiency dropped in v0.13, throat_ratio added
+    pore_size_norm:1, throat_size_norm:1, throat_ratio:1,
+    pore_size_p10:1, pore_size_p50:1, pore_size_p90:1,  // consumed by poreUmToNorm
+    pore_size_cv:1,
+    // Curvature — v0.13 redefined h_mean, added H_mean_abs and H_std
+    H_mean:1, H_mean_abs:1, H_std:1,
+    K_gauss_mean:1, curvature_uniformity:1, MIH:1,
+    // Topology — only genus_per_cell promoted; raw genus & euler_char go to jsonb
+    genus_per_cell:1,
+    // Transport rollups consume per-axis values → marked first-class so they
+    // don't double up in metrics_extended
+    tortuosity_x:1, tortuosity_y:1, tortuosity_z:1,
+    D_eff_x_norm:1, D_eff_y_norm:1, D_eff_z_norm:1,
+    // Solver diagnostics & cap flags
+    linear_cap_active:1, eps_yield_um_used:1, linear_cap_kind:1,
+    degenerate:1,                                    // v4: solver degeneracy flag
+    // Dimensional originals — explicitly dropped (recoverable via view)
+    Ex_GPa:1, Ey_GPa:1, Ez_GPa:1, stiffness_density:1,
+    keff_x:1, keff_y:1, keff_z:1, k_density:1,
+    U_strain:1, microstrain_x:1, microstrain_y:1, microstrain_z:1, microstrain_avg:1,
+    pore_size:1, throat_size:1
+  };
+
+  // metrics_extended absorbs:
+  //   - per-axis breakdowns we explicitly send to jsonb (connect_x/y/z,
+  //     perc_x/y/z, tortuosity_x/y/z, D_eff_x/y/z_norm) — these aren't
+  //     in FIRST_CLASS for "send to extended" purposes, so we add them
+  //     manually below
+  //   - euler_char and genus (raw) — kept for audit, not promoted
+  //   - any future sweep field not yet in FIRST_CLASS
+  var metricsExtended = {};
+  Object.keys(browser).forEach(function(k){
+    if (!FIRST_CLASS[k]) metricsExtended[k] = browser[k];
+  });
+  // Per-axis values that ARE in FIRST_CLASS (because they feed rollups)
+  // but should ALSO land in metrics_extended for power users / audit.
+  var ALSO_TO_EXTENDED = [
+    'connect_x', 'connect_y', 'connect_z',
+    'perc_x', 'perc_y', 'perc_z',
+    'tortuosity_x', 'tortuosity_y', 'tortuosity_z',
+    'D_eff_x_norm', 'D_eff_y_norm', 'D_eff_z_norm',
+    'euler_char', 'genus'
+  ];
+  ALSO_TO_EXTENDED.forEach(function(k){
+    if (browser[k] !== undefined) metricsExtended[k] = browser[k];
+  });
+
+  // ── Build the row ───────────────────────────────────────────────────
 
   return {
+    // Identity
     content_hash:        hash,
+    schema_version:      meta.tool_version || meta.version || null,
     family:              design.family,
 
+    // Provenance
     source_tool:         meta.tool         || null,
     source_version:      meta.tool_version || meta.version || null,
     exported_at:         meta.exported     || null,
     preset:              design.meta?.preset || meta.preset || null,
     solver:              meta.solver       || null,
 
+    // Contributor
     contributor_name:    contributor.name,
     contributor_contact: contributor.contact,
     contributor_notes:   contributor.notes || null,
 
+    // Application context — provenance for re-derivation
     domain:              context.domain,
-    material:            context.material,
-    e_solid_gpa:         context.e_solid_gpa != null ? context.e_solid_gpa : (h.E_solid_GPa ?? null),
-    context:             sweepContext || null,
+    material:            materialCard,
+    e_solid_gpa:         (materialCard && materialCard.E_GPa != null)
+                           ? materialCard.E_GPa
+                           : null,
+    sigma_ref_gpa:       lastDetectedSigmaRefGPa,
+    cell_size_mm:        lastDetectedCellSizeMm,
+    voxel_to_um:         lastDetectedVoxelToUm,
 
-    // Per-design primary metrics (from browser block, also mirrored in
-    // the per-design homogenization block since Sweep v0.10).
-    volume_fraction:     browser.volume_fraction ?? null,
-    ex_gpa:              browser.Ex_GPa          ?? null,
-    ey_gpa:              browser.Ey_GPa          ?? null,
-    ez_gpa:              browser.Ez_GPa          ?? null,
-    anisotropy:          browser.anisotropy      ?? null,
-
-    // Per-design derived metrics (from browser)
-    stiffness_density:   browser.stiffness_density ?? null,
-    aniso_efficiency:    browser.aniso_efficiency  ?? null,
-    axial_dominance:     browser.axial_dominance   ?? null,
-    ortho_contrast:      browser.ortho_contrast    ?? null,
-
-    // Connectivity & load path
+    // Geometry — material-agnostic (load_path_eff dropped in v0.13)
+    volume_fraction:     browser.volume_fraction   ?? null,
     connect_idx:         browser.connect_idx       ?? null,
     perc_idx:            browser.perc_idx          ?? null,
     stiff_axis:          browser.stiff_axis        ?? null,
-    load_path_eff:       browser.load_path_eff     ?? null,
+    anisotropy:          browser.anisotropy        ?? null,
+    axial_dominance:     browser.axial_dominance   ?? null,
+    ortho_contrast:      browser.ortho_contrast    ?? null,
+    aniso_efficiency:    browser.aniso_efficiency  ?? null,
+    surface_complexity:  browser.surface_complexity ?? null,
 
-    // Strain energy & directional microstrain
-    u_strain:            browser.U_strain          ?? null,
-    microstrain_x:       browser.microstrain_x     ?? null,
-    microstrain_y:       browser.microstrain_y     ?? null,
-    microstrain_z:       browser.microstrain_z     ?? null,
-    microstrain_avg:     browser.microstrain_avg   ?? null,
+    // Stiffness — Es-decoupled
+    ex_norm:                 browser.Ex_norm                ?? null,
+    ey_norm:                 browser.Ey_norm                ?? null,
+    ez_norm:                 browser.Ez_norm                ?? null,
+    stiffness_density_norm:  browser.stiffness_density_norm ?? null,
 
-    // Thermal
-    keff_x:              browser.keff_x            ?? null,
-    keff_y:              browser.keff_y            ?? null,
-    keff_z:              browser.keff_z            ?? null,
-    thermal_anisotropy:  browser.thermal_anisotropy ?? null,
-    k_density:           browser.k_density         ?? null,
+    // Thermal — ks-decoupled (max/avg rollups added in v4)
+    keff_x_norm:             browser.keff_x_norm        ?? null,
+    keff_y_norm:             browser.keff_y_norm        ?? null,
+    keff_z_norm:             browser.keff_z_norm        ?? null,
+    keff_max_norm:           keffMaxN,
+    keff_avg_norm:           keffAvgN,
+    thermal_anisotropy:      browser.thermal_anisotropy ?? null,
 
-    // Pore network
-    pore_size:           browser.pore_size         ?? null,
-    throat_size:         browser.throat_size       ?? null,
-    throat_efficiency:   browser.throat_efficiency ?? null,
+    // Compliance — load-decoupled (NULLed when cap active)
+    microstrain_x_per_gpa:   nullIfCapped(browser.microstrain_x_per_GPa),
+    microstrain_y_per_gpa:   nullIfCapped(browser.microstrain_y_per_GPa),
+    microstrain_z_per_gpa:   nullIfCapped(browser.microstrain_z_per_GPa),
+    microstrain_avg_per_gpa: nullIfCapped(browser.microstrain_avg_per_GPa),
+    u_compliance:            nullIfCapped(browser.U_compliance),
 
-    // Reserved — currently NULL until Sweep computes them per iteration.
-    gxy_gpa:             null,
-    nu_eff:              null,
-    surface_complexity:  null,
+    // Pore architecture — cell-decoupled (percentiles normalized at ingest;
+    // throat_efficiency dropped in v0.13, replaced by raw throat_ratio)
+    pore_size_norm:          browser.pore_size_norm    ?? null,
+    pore_size_p10_norm:      poreUmToNorm(browser.pore_size_p10),
+    pore_size_p50_norm:      poreUmToNorm(browser.pore_size_p50),
+    pore_size_p90_norm:      poreUmToNorm(browser.pore_size_p90),
+    pore_size_cv:            browser.pore_size_cv      ?? null,
+    throat_size_norm:        browser.throat_size_norm  ?? null,
+    throat_ratio:            browser.throat_ratio      ?? null,
 
+    // Curvature — v0.13 redefined h_mean as signed; raw H_mean_abs/H_std added
+    h_mean:                  browser.H_mean               ?? null,
+    h_mean_abs:              browser.H_mean_abs           ?? null,
+    h_std:                   browser.H_std                ?? null,
+    k_gauss_mean:            browser.K_gauss_mean         ?? null,
+    curvature_uniformity:    browser.curvature_uniformity ?? null,
+    mih:                     browser.MIH                  ?? null,
+
+    // Topology — only genus_per_cell promoted; raw euler_char/genus → metrics_extended
+    genus_per_cell:          browser.genus_per_cell ?? null,
+
+    // Transport — rollups (per-axis → metrics_extended)
+    tortuosity_min:          tortMin,
+    tortuosity_avg:          tortAvg,
+    d_eff_max_norm:          dEffMaxN,
+    d_eff_avg_norm:          dEffAvgN,
+
+    // Solver diagnostics & cap flags (degenerate added in v4)
+    linear_cap_active:       browser.linear_cap_active === true,
+    eps_yield_um_used:       browser.eps_yield_um_used ?? null,
+    linear_cap_kind:         browser.linear_cap_kind   ?? null,
+    degenerate:              browser.degenerate === true,
+
+    // Future-proofing — per-axis breakdowns + any unrecognized fields
+    metrics_extended:        metricsExtended,
+
+    // Full provenance blobs
     recipe:              design,
+    context:             sweepContext || null,
+
     license:             LICENSE_TAG
   };
 }
@@ -1055,53 +1387,56 @@ async function processFile(file) {
 
   // ── Auto-fill from the sweep `context` block (new in Sweep v0.10+) ───
   // Falls back to design-level / file-level paths for older exports.
+  // Uses the three-state field model: empty/auto fields get replaced,
+  // edited fields are left alone. lastDetected[] caches the file's values
+  // so the ↺ restore button can pull them back.
   var ctx = json.context || {};
 
-  // Domain
+  // ── Domain (the only UI-bound context field) ──────────────────────
   var domainAuto = ctx.domain ||
                    (json.designs[0]?.design?.domain) ||
                    (json.designs[0]?.design?.meta && json.designs[0].design.meta.domain) ||
                    meta.domain || null;
-  if (domainAuto) {
-    var dField = document.getElementById('cDomain');
-    if (dField.value.trim() === '') {
-      dField.value = domainAuto;
-      log('info', 'Domain auto-detected from sweep context: ' + domainAuto);
-      onCtxInput();
-    }
-  }
+  lastDetected.cDomain = domainAuto;
+  applyDetected('cDomain', domainAuto);
 
-  // Material — handle both legacy string and new structured object
+  // ── Material card (jsonb, flows straight to the row) ──────────────
+  // Accept either the v0.10+ structured object or a legacy string key.
   var matRaw = ctx.material;
-  var materialAuto = null;
-  if (typeof matRaw === 'string') {
-    materialAuto = matRaw;
-  } else if (matRaw && typeof matRaw === 'object') {
-    materialAuto = matRaw.key || null;
-  }
-  if (materialAuto) {
-    var mField = document.getElementById('cMaterial');
-    if (mField.value.trim() === '') {
-      mField.value = materialAuto;
-      var extra = (matRaw && typeof matRaw === 'object' && matRaw.E_GPa)
-        ? ' (E=' + matRaw.E_GPa + ' GPa, ν=' + (matRaw.nu ?? '?') + ')'
-        : '';
-      log('info', 'Material auto-detected from sweep context: ' + materialAuto + extra);
-      onCtxInput();
-    }
+  if (matRaw && typeof matRaw === 'object') {
+    lastDetectedMaterialProps = matRaw;
+  } else if (typeof matRaw === 'string') {
+    lastDetectedMaterialProps = { key: matRaw };
+  } else {
+    lastDetectedMaterialProps = null;
   }
 
-  // E_solid — prefer material.E_GPa from context, then per-design homog,
-  // then base recipe block.
-  var eField = document.getElementById('cESolid');
-  if (eField.value.trim() === '') {
-    var eAuto = (matRaw && typeof matRaw === 'object' ? matRaw.E_GPa : null) ||
-                json.designs[0]?.design?.homogenization?.E_solid_GPa ||
-                json.base?.E_solid_GPa || null;
-    if (eAuto) {
-      eField.value = eAuto;
-      log('info', 'E_solid auto-filled: ' + eAuto + ' GPa');
-    }
+  // ── File-level provenance for buildRow ────────────────────────────
+  lastDetectedSigmaRefGPa = (typeof ctx.sigma_ref_GPa === 'number') ? ctx.sigma_ref_GPa : null;
+  lastDetectedCellSizeMm  = (typeof ctx.cellSize_mm   === 'number') ? ctx.cellSize_mm   : null;
+  lastDetectedVoxelToUm   = (typeof ctx.voxelToUm_um  === 'number') ? ctx.voxelToUm_um  : null;
+
+  // ── Logging — what got captured from this file ────────────────────
+  if (domainAuto && getFieldSource('cDomain') === 'auto') {
+    log('info', 'Domain auto-detected from sweep context: ' + domainAuto);
+  } else if (domainAuto) {
+    log('info', 'Domain in file: ' + domainAuto + ' (kept your edited value)');
+  }
+  if (lastDetectedMaterialProps) {
+    var m = lastDetectedMaterialProps;
+    var matBits = [];
+    if (m.E_GPa  !== undefined) matBits.push('E=' + m.E_GPa + ' GPa');
+    if (m.nu     !== undefined) matBits.push('ν=' + m.nu);
+    if (m.k_W_mK !== undefined) matBits.push('k=' + m.k_W_mK + ' W/mK');
+    log('info', 'Material card captured: ' + (m.key || '(no key)') +
+        (matBits.length ? ' · ' + matBits.join(' · ') : ''));
+  } else {
+    log('warn', 'No material card in sweep context — material column will be empty');
+  }
+  if (lastDetectedSigmaRefGPa !== null) {
+    log('info', 'Sweep provenance: σ_ref=' + lastDetectedSigmaRefGPa + ' GPa, cell=' +
+        (lastDetectedCellSizeMm ?? '?') + ' mm, voxel=' +
+        (lastDetectedVoxelToUm ?? '?') + ' μm');
   }
 
   var contributor = getContributor();
@@ -1177,7 +1512,9 @@ async function processFile(file) {
   document.getElementById('actionBar').style.display    = 'flex';
   document.getElementById('dropZone').classList.add('loaded');
   document.getElementById('dropTitle').textContent = file.name;
-  document.getElementById('dropSub').textContent   = 'Loaded · drop another to replace';
+  var summary = buildFileSummary(json);
+  document.getElementById('dropSub').textContent =
+    summary ? (summary + ' · drop another to replace') : 'Loaded · drop another to replace';
 
   var insertBtn = document.getElementById('insertBtn');
   if (nValid > 0) {
@@ -1311,6 +1648,20 @@ function resetTool() {
   document.getElementById('previewBody').innerHTML = '';
   document.getElementById('logBadge').textContent = 'idle';
   document.getElementById('fileInput').value = '';
+
+  // Clear Domain field and its detection cache so the next file
+  // doesn't inherit stale auto values.
+  CTX_FIELDS.forEach(function(id) {
+    document.getElementById(id).value = '';
+    setFieldSource(id, '');
+    lastDetected[id] = null;
+  });
+  // Headless caches populated on file drop
+  lastDetectedMaterialProps = null;
+  lastDetectedSigmaRefGPa   = null;
+  lastDetectedCellSizeMm    = null;
+  lastDetectedVoxelToUm     = null;
+
   log('info', 'Reset — drop a new sweep export to begin.');
   refreshGates();
 }
