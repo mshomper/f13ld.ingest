@@ -532,7 +532,7 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
       </svg>
       <span class="fh-vault-label">vault</span>
     </div>
-    <span class="fh-version">v0.7.0</span>
+    <span class="fh-version">v0.8.0</span>
     <div class="fh-icon">
       <svg width="18" height="18" viewBox="0 0 40 40">
         <line x1="3" y1="9"  x2="16" y2="20" stroke="#3C3489" stroke-width="1.8" stroke-linecap="round"/>
@@ -938,7 +938,17 @@ function buildFileSummary(json) {
   // Preset only makes sense when one family is present
   if (famKeys.length === 1 && meta.preset) parts.push(meta.preset);
   if (meta.tool_version || meta.version) {
-    parts.push('sweep v' + (meta.tool_version || meta.version));
+    var v = meta.tool_version || meta.version;
+    parts.push('sweep v' + v);
+    // v5: surface migration annotation for older exports. v0.14+ exports
+    // include solver_validity, directionality, cg_iters, cg_converged.
+    // v0.13 exports lack these → ingest stores nulls (vault treats missing
+    // solver_validity rows as 'valid' by convention since v0.13's behavior
+    // matched 'valid' semantics: no per-axis gating, full inversion).
+    var match = String(v).match(/^0\.(\d+)\./);
+    if (match && parseInt(match[1], 10) < 14) {
+      parts.push('⚠ v0.13 export — solver_validity/directionality will be null');
+    }
   }
   return parts.join(' · ');
 }
@@ -1086,9 +1096,10 @@ function validateDesign(d) {
   }
 
   // ── Sweep schema version tripwire ───────────────────────────────────
-  // Vault schema v4 requires v0.13+ canonical metrics. Use fields that
-  // were ADDED in v0.13 (not present in v0.12) so a v0.12 export gets
-  // a clear rejection. H_mean_abs is the cleanest v0.13 marker.
+  // Vault schema v5 prefers v0.14.1+ canonical metrics, but accepts v0.13+
+  // (older exports get nulls for v0.14-only fields like solver_validity,
+  // directionality, cg_iters, cg_converged). Hard-required fields below
+  // were present in v0.13 — exports lacking them are rejected.
   if (typeof b.linear_cap_active !== 'boolean')
     return 'missing linear_cap_active — Sweep v0.13+ required';
   if (typeof b.stiffness_density_norm !== 'number')
@@ -1100,10 +1111,30 @@ function validateDesign(d) {
   if (typeof b.tortuosity_x !== 'number')
     return 'missing tortuosity_x — Sweep v0.13+ required';
 
-  if (typeof b.anisotropy !== 'number')
-    return 'anisotropy missing or non-numeric';
-  if (b.anisotropy < 1.0 - 0.005)
+  // v5: anisotropy is NULLABLE in v0.14.0+ (when fewer than 2 axes percolate).
+  // Older v0.13 exports never produce null, so null indicates v0.14+ export.
+  if (b.anisotropy !== null && typeof b.anisotropy !== 'number')
+    return 'anisotropy must be a number or null';
+  if (typeof b.anisotropy === 'number' && b.anisotropy < 1.0 - 0.005)
     return 'anisotropy ' + b.anisotropy.toFixed(2) + ' < 1.0 (impossible)';
+
+  // v5: solver_validity validation (v0.14.0+ only — accept missing for v0.13)
+  if (b.solver_validity !== undefined && b.solver_validity !== null) {
+    if (b.solver_validity !== 'valid' &&
+        b.solver_validity !== 'partial' &&
+        b.solver_validity !== 'invalid')
+      return "solver_validity must be 'valid', 'partial', or 'invalid'";
+  }
+
+  // v5: cg_iters / cg_converged validation (v0.14.0+ only)
+  if (b.cg_iters !== undefined && b.cg_iters !== null) {
+    if (typeof b.cg_iters !== 'number' || b.cg_iters < 0 || b.cg_iters !== Math.floor(b.cg_iters))
+      return 'cg_iters must be a non-negative integer';
+  }
+  if (b.cg_converged !== undefined && b.cg_converged !== null) {
+    if (typeof b.cg_converged !== 'boolean')
+      return 'cg_converged must be a boolean';
+  }
 
   // Stiffness sanity — switched from Ex_GPa to Ex_norm in v0.7.0 since
   // norm fields are guaranteed and the GPa fields are no longer stored.
@@ -1115,12 +1146,17 @@ function validateDesign(d) {
     if (v < 0)                 return axes[i] + ' = ' + v + ' (negative — impossible)';
   }
 
-  // Anisotropy consistency — only enforced where ≥ 2 axes are connected.
-  var connected = axes.map(function(a){ return b[a]; }).filter(function(e){ return e > 1e-7; });
-  if (connected.length >= 2) {
-    var computed = Math.max.apply(null, connected) / Math.min.apply(null, connected);
-    if (Math.abs(computed - b.anisotropy) / Math.max(computed, 0.001) > 0.30)
-      return 'anisotropy ' + b.anisotropy.toFixed(2) + ' inconsistent with E_x/E_y/E_z (computed ' + computed.toFixed(2) + ')';
+  // Anisotropy consistency — only enforced where ≥ 2 axes are connected
+  // AND anisotropy is not null. Null anisotropy from v0.14+ means fewer
+  // than 2 axes percolate at the canonical (hi-res) level — consistency
+  // check doesn't apply.
+  if (typeof b.anisotropy === 'number') {
+    var connected = axes.map(function(a){ return b[a]; }).filter(function(e){ return e > 1e-7; });
+    if (connected.length >= 2) {
+      var computed = Math.max.apply(null, connected) / Math.min.apply(null, connected);
+      if (Math.abs(computed - b.anisotropy) / Math.max(computed, 0.001) > 0.30)
+        return 'anisotropy ' + b.anisotropy.toFixed(2) + ' inconsistent with E_x/E_y/E_z (computed ' + computed.toFixed(2) + ')';
+    }
   }
 
   // ── Family-specific recipe structure (still on the recipe, not browser) ─
@@ -1196,9 +1232,9 @@ function buildRow(d, hash, meta, contributor, context, sweepContext) {
   // metrics_extended. This means future sweep versions can add new
   // browser fields without an ingest update.
   var FIRST_CLASS = {
-    // Geometry (load_path_eff dropped in v0.13)
+    // Geometry — v5: axial_dominance dropped, directionality added (v0.14.0)
     volume_fraction:1, connect_idx:1, perc_idx:1, stiff_axis:1,
-    anisotropy:1, axial_dominance:1, ortho_contrast:1,
+    anisotropy:1, directionality:1, ortho_contrast:1,
     aniso_efficiency:1, surface_complexity:1,
     // Stiffness — Es-decoupled
     Ex_norm:1, Ey_norm:1, Ez_norm:1, stiffness_density_norm:1,
@@ -1223,6 +1259,7 @@ function buildRow(d, hash, meta, contributor, context, sweepContext) {
     // Solver diagnostics & cap flags
     linear_cap_active:1, eps_yield_um_used:1, linear_cap_kind:1,
     degenerate:1,                                    // v4: solver degeneracy flag
+    solver_validity:1, cg_iters:1, cg_converged:1,   // v5: v0.14.0 connectivity-informed solver state
     // Dimensional originals — explicitly dropped (recoverable via view)
     Ex_GPa:1, Ey_GPa:1, Ez_GPa:1, stiffness_density:1,
     keff_x:1, keff_y:1, keff_z:1, k_density:1,
@@ -1284,13 +1321,15 @@ function buildRow(d, hash, meta, contributor, context, sweepContext) {
     cell_size_mm:        lastDetectedCellSizeMm,
     voxel_to_um:         lastDetectedVoxelToUm,
 
-    // Geometry — material-agnostic (load_path_eff dropped in v0.13)
+    // Geometry — material-agnostic (axial_dominance dropped in v0.14.0,
+    // directionality added). v0.14.1 makes anisotropy + aniso_efficiency
+    // nullable when fewer than 2 axes percolate (mathematically undefined).
     volume_fraction:     browser.volume_fraction   ?? null,
     connect_idx:         browser.connect_idx       ?? null,
     perc_idx:            browser.perc_idx          ?? null,
     stiff_axis:          browser.stiff_axis        ?? null,
     anisotropy:          browser.anisotropy        ?? null,
-    axial_dominance:     browser.axial_dominance   ?? null,
+    directionality:      browser.directionality    ?? null,   // v5: NEW (replaces axial_dominance)
     ortho_contrast:      browser.ortho_contrast    ?? null,
     aniso_efficiency:    browser.aniso_efficiency  ?? null,
     surface_complexity:  browser.surface_complexity ?? null,
@@ -1343,11 +1382,17 @@ function buildRow(d, hash, meta, contributor, context, sweepContext) {
     d_eff_max_norm:          dEffMaxN,
     d_eff_avg_norm:          dEffAvgN,
 
-    // Solver diagnostics & cap flags (degenerate added in v4)
+    // Solver diagnostics & cap flags (degenerate added in v4;
+    // solver_validity/cg_iters/cg_converged added in v5 from sweep v0.14.0)
     linear_cap_active:       browser.linear_cap_active === true,
     eps_yield_um_used:       browser.eps_yield_um_used ?? null,
     linear_cap_kind:         browser.linear_cap_kind   ?? null,
     degenerate:              browser.degenerate === true,
+    solver_validity:         browser.solver_validity   ?? null,   // v5: 'valid'|'partial'|'invalid'|null(v0.13)
+    cg_iters:                browser.cg_iters          ?? null,   // v5: total CG iterations
+    cg_converged:            (typeof browser.cg_converged === 'boolean')
+                               ? browser.cg_converged
+                               : null,                            // v5: tri-state (true|false|null for v0.13)
 
     // Future-proofing — per-axis breakdowns + any unrecognized fields
     metrics_extended:        metricsExtended,
