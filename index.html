@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Force fresh fetch — ingest.html is policy-coupled and must not run from a stale cache. -->
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>F13LD — Ingest</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1179,6 +1183,40 @@ function validateDesign(d) {
   return null; // valid
 }
 
+// ── Server policy pre-flight ───────────────────────────────────────────
+// Mirrors the RLS WITH CHECK predicate on f13ld_designs so a row that
+// would fail server-side gets flagged here with a clear field name
+// instead of bouncing as a generic 42501 mid-batch. Update this in
+// lockstep with the policy if the policy ever changes.
+//
+// Policy (as of 2026-05): all of content_hash, family, schema_version,
+// domain, contributor_name, contributor_contact must be non-empty
+// strings; license must be non-null; family must be in KNOWN_FAMILIES.
+//
+// Returns null if the row would pass server-side, otherwise a short
+// reason string in the same shape as validateDesign().
+function policyCheckRow(row) {
+  function nonEmpty(v) { return typeof v === 'string' && v.length > 0; }
+  if (!nonEmpty(row.content_hash))
+    return 'policy: content_hash empty (row builder bug)';
+  if (!nonEmpty(row.family))
+    return 'policy: family empty';
+  if (KNOWN_FAMILIES.indexOf(row.family) < 0)
+    return 'policy: family "' + row.family + '" not in {' +
+           KNOWN_FAMILIES.join(', ') + '} — likely stale cached ingest';
+  if (!nonEmpty(row.schema_version))
+    return 'policy: schema_version empty — sweep meta missing tool_version';
+  if (!nonEmpty(row.domain))
+    return 'policy: domain empty (Domain field blank?)';
+  if (!nonEmpty(row.contributor_name))
+    return 'policy: contributor_name empty';
+  if (!nonEmpty(row.contributor_contact))
+    return 'policy: contributor_contact empty';
+  if (row.license == null)
+    return 'policy: license null';
+  return null;
+}
+
 // ── Build the row that gets POSTed to Supabase ─────────────────────────
 function buildRow(d, hash, meta, contributor, context, sweepContext) {
   var design  = d.design;
@@ -1527,6 +1565,17 @@ async function processFile(file) {
     }
 
     var row = buildRow(d, hash, meta, contributor, context, json.context || null);
+
+    // Pre-flight against the RLS WITH CHECK predicate. If the server
+    // would reject this row, fail fast here with a field-level reason
+    // instead of letting the batch POST surface as a generic 42501.
+    var policyReason = policyCheckRow(row);
+    if (policyReason) {
+      processedRows.push({ status: 'invalid', reason: policyReason, d: d });
+      nInvalid++;
+      continue;
+    }
+
     processedRows.push({ status: 'valid', row: row, d: d, hash: hash });
     existingHashes.add(hash); // prevent intra-file dupes
     familyCounts[d.design.family] = (familyCounts[d.design.family] || 0) + 1;
