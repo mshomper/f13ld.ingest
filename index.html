@@ -429,6 +429,7 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
 .family-pill.tpms { background:#E1F5EE;color:#085041; }
 .family-pill.noise{ background:#FAECE7;color:#712B13; }
 .family-pill.grain{ background:#EDECE8;color:#3D3A30; }
+.family-pill.beam { background:#ECF1DA;color:#4A5A0F; }
 
 /* ── Action bar ───────────────────────────────────────────────────────── */
 .action-bar{
@@ -735,7 +736,7 @@ var VF_LOW_THRESHOLD = 1.25;
 var VF_MAX           = 80.0;
 var MIN_CONNECT_IDX  = 0.33;  // 1 of 3 axes — connect_idx scale {0, 0.33, 0.67, 1}
 
-var KNOWN_FAMILIES = ['tpms', 'noise', 'grain'];
+var KNOWN_FAMILIES = ['tpms', 'noise', 'grain', 'beam'];
 
 // ── State ──────────────────────────────────────────────────────────────
 var parsedFile    = null;     // raw parsed JSON
@@ -1002,7 +1003,7 @@ function refreshGates() {
     dz.classList.remove('disabled');
     if (!parsedFile) {
       document.getElementById('dropTitle').textContent = 'Drop a sweep export JSON to begin';
-      document.getElementById('dropSub').textContent   = 'F13LD.sweep export · TPMS · Noise · Grain';
+      document.getElementById('dropSub').textContent   = 'F13LD.sweep export · TPMS · Noise · Grain · Beam';
     }
   } else {
     dz.classList.add('disabled');
@@ -1176,6 +1177,15 @@ function validateDesign(d) {
   if (design.family === 'grain') {
     if (!design.field) return 'grain missing field block';
     if (!design.field.type) return 'grain missing field.type';
+  }
+  if (design.family === 'beam') {
+    // Beam recipes are structurally distinct from surface/field families:
+    // discriminators live in `topology` (preset name + beam count) and the
+    // strut endpoints sit in a top-level `beams[]` array. Both are required
+    // for F13LD.mesh to reconstruct the lattice.
+    if (!design.topology) return 'beam missing topology block';
+    if (!Array.isArray(design.beams) || design.beams.length === 0)
+      return 'beam missing beams[] array — not reconstructable';
   }
 
   if (!design.geometry) return 'missing geometry block';
@@ -1545,7 +1555,7 @@ async function processFile(file) {
   // Process each design
   processedRows = [];
   var nValid = 0, nDupe = 0, nInvalid = 0;
-  var familyCounts = { tpms: 0, noise: 0, grain: 0 };
+  var familyCounts = { tpms: 0, noise: 0, grain: 0, beam: 0 };
 
   for (var i = 0; i < json.designs.length; i++) {
     var d = json.designs[i];
@@ -1635,7 +1645,8 @@ function renderPreview() {
 
     var preset = (design.meta && design.meta.preset) ||
                  (design.surface && design.surface.noise_type) ||
-                 (design.field && design.field.type) || '—';
+                 (design.field && design.field.type) ||
+                 (design.topology && design.topology.name) || '—';
 
     var tr = document.createElement('tr');
     tr.innerHTML =
