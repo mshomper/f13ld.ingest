@@ -430,6 +430,13 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
 .family-pill.noise{ background:#FAECE7;color:#712B13; }
 .family-pill.grain{ background:#EDECE8;color:#3D3A30; }
 .family-pill.beam { background:#ECF1DA;color:#4A5A0F; }
+.family-pill.foam  { background:#F7F1E3;color:#5E4B1E; }
+.family-pill.wave  { background:#FBEBD5;color:#7A3E04; }
+.family-pill.bundle{ background:#EEE6F4;color:#4A2A63; }
+/* v0.9.0 — Sweep v0.26+ markers: the recipe itself (reference) and the
+   "stiffness may read high" flag */
+.ref-tag{ display:inline-block;margin-left:5px;padding:0 5px;border-radius:7px;border:1px dashed var(--primary);color:var(--primary);font-size:9px;letter-spacing:0.06em; }
+.sflag-dot{ display:inline-block;width:6px;height:6px;margin-left:5px;border-radius:50%;background:var(--warn);vertical-align:middle; }
 
 /* ── Action bar ───────────────────────────────────────────────────────── */
 .action-bar{
@@ -537,7 +544,7 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
       </svg>
       <span class="fh-vault-label">vault</span>
     </div>
-    <span class="fh-version">v0.8.0</span>
+    <span class="fh-version">v0.9.0</span>
     <div class="fh-icon">
       <svg width="18" height="18" viewBox="0 0 40 40">
         <line x1="3" y1="9"  x2="16" y2="20" stroke="#3C3489" stroke-width="1.8" stroke-linecap="round"/>
@@ -716,7 +723,7 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
 <script>
 // ═══════════════════════════════════════════════════════════════════════
 // F13LD.ingest — public ingest tool for the F13LD design suite
-// Reads sweep exports (TPMS · Noise · Grain), validates per-family physics,
+// Reads sweep exports (TPMS · Noise · Grain · Beam · Foam · Wave · Bundle), validates per-family physics,
 // and inserts into the public f13ld_designs Supabase table.
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -736,7 +743,7 @@ var VF_LOW_THRESHOLD = 1.25;
 var VF_MAX           = 80.0;
 var MIN_CONNECT_IDX  = 0.33;  // 1 of 3 axes — connect_idx scale {0, 0.33, 0.67, 1}
 
-var KNOWN_FAMILIES = ['tpms', 'noise', 'grain', 'beam'];
+var KNOWN_FAMILIES = ['tpms', 'noise', 'grain', 'beam', 'foam', 'wave', 'bundle'];   // v0.9.0: foam, wave, bundle (Sweep v0.27+)
 
 // ── State ──────────────────────────────────────────────────────────────
 var parsedFile    = null;     // raw parsed JSON
@@ -1186,6 +1193,24 @@ function validateDesign(d) {
     if (!design.topology) return 'beam missing topology block';
     if (!Array.isArray(design.beams) || design.beams.length === 0)
       return 'beam missing beams[] array — not reconstructable';
+  }
+
+  // v0.9.0 — the families Sweep added in v0.27+ (F13LD.foam / .wave / .bundle exports)
+  if (design.family === 'foam') {
+    if (!design.seeds) return 'foam missing seeds block';
+    if (design.domain && design.domain.periodic === false) return 'foam is not periodic — not a valid unit cell';
+    var sd = design.seeds;
+    var hasPos = Array.isArray(sd.positions) && sd.positions.length >= 3;
+    if (!hasPos && !(sd.mode && (sd.count > 0)))
+      return 'foam has neither seed positions nor seed settings to rebuild them — not reconstructable';
+  }
+  if (design.family === 'wave') {
+    if (!design.field || !Array.isArray(design.field.modes) || design.field.modes.length === 0)
+      return 'wave missing field.modes — not reconstructable';
+    if (!design.geometry) return null;   // wave keeps its settings in field
+  }
+  if (design.family === 'bundle') {
+    if (!design.surface || !design.surface.structure) return 'bundle missing surface.structure';
   }
 
   if (!design.geometry) return 'missing geometry block';
@@ -1645,18 +1670,23 @@ function renderPreview() {
 
     var preset = (design.meta && design.meta.preset) ||
                  (design.surface && design.surface.noise_type) ||
+                 (design.surface && design.surface.structure) ||
                  (design.field && design.field.type) ||
+                 (design.field && design.field.symmetry) ||
                  (design.topology && design.topology.name) || '—';
+    // v0.9.0 — the recipe itself (Sweep's design #0) and the stiffness flag
+    var refTag = b.reference ? '<span class="ref-tag" title="The swept recipe itself (Sweep reference design)">ref</span>' : '';
+    var flagDot = b.stiffness_flag ? '<span class="sflag-dot" title="Stiffness may read high: ' + escapeHTML(b.stiffness_flag_reasons || '') + '"></span>' : '';
 
     var tr = document.createElement('tr');
     tr.innerHTML =
       '<td><span class="status-badge ' + pr.status + '">' + pr.status + '</span></td>' +
-      '<td>' + (d.id ?? '—') + '</td>' +
+      '<td>' + (d.id ?? '—') + refTag + '</td>' +
       '<td><span class="family-pill ' + family + '">' + family + '</span></td>' +
       '<td>' + escapeHTML(String(preset)) + '</td>' +
       '<td>' + (typeof b.volume_fraction === 'number' ? b.volume_fraction.toFixed(2) : '—') + '</td>' +
       '<td>' + (typeof b.anisotropy === 'number' ? b.anisotropy.toFixed(2) : '—') + '</td>' +
-      '<td>' + (typeof b.Ex_GPa === 'number' ? b.Ex_GPa.toFixed(2) : '—') + '</td>' +
+      '<td>' + (typeof b.Ex_GPa === 'number' ? b.Ex_GPa.toFixed(2) : '—') + flagDot + '</td>' +
       '<td>' + (typeof b.Ey_GPa === 'number' ? b.Ey_GPa.toFixed(2) : '—') + '</td>' +
       '<td>' + (typeof b.Ez_GPa === 'number' ? b.Ez_GPa.toFixed(2) : '—') + '</td>' +
       '<td>' + (typeof b.stiffness_density === 'number' ? b.stiffness_density.toFixed(1) : '—') + '</td>' +
