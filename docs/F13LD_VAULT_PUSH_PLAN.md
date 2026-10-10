@@ -1,6 +1,6 @@
 # F13LD — direct push to F13LD.vault (plan for approval)
 
-Status: proposal, 2026-10-10. Nothing has been changed in any repo. The SQL below is a draft for review, not to run yet.
+Status (2026-10-10, 19:30): **Phases 1–3 done.** Phase 1 SQL run by Matt (scripts in `docs/sql/`, run 2026-10-10); Phase 2 = F13LD.ingest v0.10.1 / `f13ld-vault-push.js` v1.0.1; Phase 3 = F13LD.sweep v0.29.2 Push to Vault. Next: Matt's Vault wipe and reseed, then Phase 4 (Lab push) and Phase 5 (Vault display) in fresh sessions. Recap: [`SESSION_RECAP_2026-10-10.md`](SESSION_RECAP_2026-10-10.md). The draft SQL below was superseded by the migration that ran (section "Phase 1 status").
 
 Builds on `f13ld.lab/docs/VAULT_ROUNDTRIP_SCOPE.md`, with Matt's answers from 2026-10-10:
 
