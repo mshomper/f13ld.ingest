@@ -29,6 +29,7 @@ Each design must pass all of the following before it is accepted:
 - File must contain a valid `meta` block and a `designs` array — confirming it was produced by the F13LD Sweep tool
 - Each record must contain both a `metrics` block and a `design` block
 - Surface `terms` must be present and non-empty (required for geometry reconstruction)
+- Per family: TPMS `surface.terms`, noise `noise_type`, grain `field.type`, beam `topology` + `beams[]`, foam seeds (periodic), wave `field.modes` with **whole-number mode indices** (v0.9.1 — a fractional index is not one periodic cell; F13LD.sweep v0.29 refuses those too), bundle `surface.structure`
 
 **Physics plausibility checks**
 - `volume_fraction` must be in the range (0%, 75%)
@@ -42,6 +43,11 @@ Each design must pass all of the following before it is accepted:
 - Records already present in the database are flagged as duplicates and skipped, not re-inserted
 
 ---
+
+## Status and next steps
+
+- **v0.9.1 (2026-10-10):** wave designs need whole-number mode indices. Sweep v0.29.1 exports (Wave family, cell stretch `field.stretch`, every family's curvature / topology now measured, `metrics_N`) validate unchanged — new fields land in `metrics_extended`.
+- **Next:** Matt wipes and re-seeds F13LD.vault from fresh Sweep v0.29.1 exports. When Sweep adds Bundle (v0.30.0), check its exports against the bundle structure check (and whether the cell box needs validating).
 
 ## Output summary
 
