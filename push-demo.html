@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F13LD Push Window Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --g:#06080c; --p:#0d1117; --l:#232c37; --t:#e7ecef; --m:#8b97a3; --jade:#1D9E75; --lime:#c8f542; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--g); color: var(--t); font: 14px/1.5 "Exo 2", system-ui, sans-serif; overflow-x: hidden; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  h1 span { color: var(--jade); }
+  p { color: var(--m); margin: 0 0 16px; }
+  .card { background: var(--p); border: 1px solid var(--l); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  .card h2 { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  select, button { font: inherit; font-size: 14px; color: var(--t); background: var(--g); border: 1px solid var(--l); border-radius: 8px; padding: 8px 12px; max-width: 100%; }
+  button { cursor: pointer; }
+  button.go { background: var(--lime); color: var(--g); border-color: var(--lime); font-weight: 600; }
+  button.go.lab { background: #E06A6F; border-color: #E06A6F; color: var(--g); }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; color: var(--m); overflow-wrap: anywhere; }
+  .drop { border: 1px dashed var(--l); border-radius: 10px; padding: 14px; text-align: center; color: var(--m); cursor: pointer; }
+  .drop.over { border-color: var(--lime); color: var(--t); }
+  .tag { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: #e0b45a; border: 1px solid #e0b45a; border-radius: 6px; padding: 1px 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>F13LD<span>.vault</span> push window</h1>
+  <p>Test page for <span class="mono">f13ld-vault-push.js</span>, the shared push used by F13LD.ingest, F13LD.sweep and F13LD.lab. <span class="tag">dry run</span> Reads F13LD.vault to find duplicates; never writes to it.</p>
+
+  <div class="card">
+    <h2>1 · Choose an export</h2>
+    <div class="row">
+      <select id="fx">
+        <option value="tests/fixtures/tpms-gyroid-sheet.json">TPMS gyroid sheet · 4 designs</option>
+        <option value="tests/fixtures/beam-bcc.json">Beam BCC · 3 designs (one fails)</option>
+        <option value="tests/fixtures/foam-open-lloyd.json">Foam open Lloyd · 4 designs</option>
+        <option value="tests/fixtures/wave-schwarzp-solid.json">Wave Schwarz P · 4 designs</option>
+        <option value="tests/fixtures/edge-cases.json">Edge cases · 25 designs (many fail)</option>
+        <option value="tests/fixtures/big-run.json">Big run · 130 designs</option>
+      </select>
+      <span class="mono" id="fxInfo"></span>
+    </div>
+    <div class="drop" id="drop" style="margin-top:10px">or drop your own Sweep export here</div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Open the push window</h2>
+    <div class="row">
+      <button class="go" id="goSweep">As F13LD.sweep</button>
+      <button class="go lab" id="goLab">As F13LD.lab, with sample Lab solves</button>
+      <button id="forget">Forget the licence tick</button>
+    </div>
+    <p class="mono" id="last" style="margin:10px 0 0"></p>
+  </div>
+</main>
+
+<script src="f13ld-vault-push.js"></script>
+<script>
+var V = window.F13LDVault;
+var current = null, currentName = '';
+function setInfo() {
+  document.getElementById('fxInfo').textContent = current
+    ? currentName + ' · ' + current.designs.length + ' designs · push file v' + V.VERSION : 'loading';
+}
+function loadFixture() {
+  var url = document.getElementById('fx').value;
+  current = null; setInfo();
+  fetch(url).then(function (r) { return r.json(); }).then(function (j) { current = j; currentName = url.split('/').pop(); setInfo(); });
+}
+document.getElementById('fx').addEventListener('change', loadFixture);
+var drop = document.getElementById('drop');
+drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
+drop.addEventListener('drop', function (e) {
+  e.preventDefault(); drop.classList.remove('over');
+  var f = e.dataTransfer.files[0]; if (!f) return;
+  f.text().then(function (t) { current = JSON.parse(t); currentName = f.name; setInfo(); })
+         .catch(function (err) { document.getElementById('last').textContent = 'Could not read ' + f.name + ': ' + err.message; });
+});
+
+// Sample Lab solves: made-up numbers, shaped like what F13LD.lab will send
+function sampleLab(json) {
+  return json.designs.slice(0, 3).map(function (d, i) {
+    var b = d.browser || {};
+    return { designIndex: i, result: {
+      lab_version: '0.27.0-demo', grid_n: 64, partial_volume: true, converged: true,
+      material_key: 'ti64_g5_hip', e_solid_gpa: 113.8, cell_size_mm: 2,
+      ex_norm: b.Ex_norm, ey_norm: b.Ey_norm, ez_norm: b.Ez_norm,
+      lambda_cr: 0.031, buckling_axis: 'z', failure_mode: 'Yield-limited',
+      sigma_y_z_mpa: 41.2, k_rel_water: 0.21, demo_note: 'sample values'
+    } };
+  });
+}
+function go(kind) {
+  if (!current) return;
+  var opts = { json: current, dryRun: true,
+    source: kind === 'lab' ? 'F13LD.lab' : 'F13LD.sweep',
+    provenanceKind: kind,
+    accent: kind === 'lab' ? '#E06A6F' : '#c8f542' };
+  if (kind === 'lab') {
+    opts.labResults = sampleLab(current);
+    opts.heldBack = [{ label: 'gyroid stretched', reason: 'stretched cell — F13LD.lab solves cubic cells only for now' }];
+  }
+  V.openPushDialog(opts).then(function (res) {
+    document.getElementById('last').textContent = 'Last result: ' + JSON.stringify({
+      pushed: res.pushed,
+      designs: res.designs && { inserted: res.designs.inserted, duplicates: res.designs.duplicates, failed: res.designs.failed },
+      lab: res.lab && { inserted: res.lab.inserted, failed: res.lab.failed } });
+  });
+}
+document.getElementById('goSweep').addEventListener('click', function () { go('sweep'); });
+document.getElementById('goLab').addEventListener('click', function () { go('lab'); });
+document.getElementById('forget').addEventListener('click', function () {
+  V.setConsent(false);
+  document.getElementById('last').textContent = 'Licence tick cleared for this browser session.';
+});
+loadFixture();
+</script>
+</body>
+</html>

@@ -12,6 +12,9 @@ Ingest is the bridge between the F13LD design tools and the Vault database. It a
 
 ```
 Sweep export (.json)  →  Ingest  →  Vault (PostgreSQL / Supabase)
+F13LD.sweep · Push to Vault  ─┐
+F13LD.lab   · Push to Vault  ─┼─→  f13ld-vault-push.js  →  Vault
+F13LD.ingest · file drop     ─┘
 ```
 
 1. Drag and drop a Sweep export JSON into the tool
@@ -19,7 +22,20 @@ Sweep export (.json)  →  Ingest  →  Vault (PostgreSQL / Supabase)
 3. Validated records are uploaded to the database in batches
 4. A summary and per-record log are displayed showing pass / fail / duplicate status
 
----
+### The shared push file (v0.10.0)
+
+`f13ld-vault-push.js` holds the one copy of the rules — `validateDesign`, `policyCheckRow`, `buildRow`, hashing, the duplicate check and the batched insert — plus the push window F13LD.sweep and F13LD.lab show. Ingest loads it from this folder; Sweep and Lab load it from `https://mshomper.github.io/f13ld.ingest/f13ld-vault-push.js`, so a rule change here reaches every tool when Ingest deploys. It exposes `window.F13LDVault`:
+
+| Call | What it does |
+|---|---|
+| `analyze(json)` | per-design status (valid · dupe · invalid + reason) and content hash; asks the database only about this file's hashes |
+| `buildRows(analysis, {contributor, domain, provenanceKind})` | rows for the valid designs; `provenance_kind` is `sweep`, `lab` or `file` (Ingest drops) |
+| `insertDesigns(rows, {onProgress, dryRun})` | batches of 50; a batch that hits a duplicate is retried one row at a time |
+| `prepareLabRows(analysis, labResults, contributor)` · `insertLabResults(rows)` | F13LD.lab solves into `f13ld_lab_results`, tied to the design's hash; unknown fields go to `results_extended` |
+| `openPushDialog(opts)` | the push window: counts, reasons, contributor, domain, CC0 tick, progress, result |
+| `loadContributor` · `saveContributor` · `hasConsent` · `setConsent` | contributor details shared by every F13LD tool on this site; the CC0 tick is remembered for the browser session (a session cookie) |
+
+`push-demo.html` opens the push window on bundled exports in dry-run mode (reads Vault for duplicates, never writes).
 
 ## Validation checks
 
@@ -46,8 +62,11 @@ Each design must pass all of the following before it is accepted:
 
 ## Status and next steps
 
+- **v0.10.0 (2026-10-10):** the rules move into `f13ld-vault-push.js`, shared with F13LD.sweep and F13LD.lab. Same checks, same rows (`tests/parity.js` compares old and new Ingest on real Sweep v0.29.1 exports). Changes: rows carry `provenance_kind` (`file` for Ingest drops); the duplicate check asks only about the file's hashes, so the database's 1,000-row response limit no longer hides duplicates (Vault passed 1,000 designs); a batch that hits a duplicate is retried one design at a time instead of failing all 50; the contributor and domain can be filled in after the drop; the CC0 tick is remembered for the browser session; a design repeated inside one file reads "repeated in this file".
+- **Database (2026-10-10 migration):** the public key reads named columns only and never `contributor_contact`; it inserts but cannot update, delete or truncate. New table `f13ld_lab_results` (one row per Lab solve, insert-only, tied to a design by `content_hash`, cleared with it). A new column on either table needs a `grant select (column)` before Vault can read it. To wipe Vault: `delete from public.f13ld_designs;` (also clears Lab results).
 - **v0.9.1 (2026-10-10):** wave designs need whole-number mode indices. Sweep v0.29.1 exports (Wave family, cell stretch `field.stretch`, every family's curvature / topology now measured, `metrics_N`) validate unchanged — new fields land in `metrics_extended`.
-- **Next:** accept F13LD.lab results exports (the Lab → Vault round trip, scoped in `f13ld.lab/docs/VAULT_ROUNDTRIP_SCOPE.md`: match rows by content hash, write Lab-verified results, mirror any policy change in `policyCheckRow`). Matt wipes and re-seeds F13LD.vault from fresh Sweep v0.29.1 exports. When Sweep adds Bundle (v0.30.0), check its exports against the bundle structure check (and whether the cell box needs validating).
+- **Found, not changed:** a beam recipe loaded into Sweep without a `topology` block (the F13LD.mesh test recipe `beam-bcc`) exports its reference design without one, and Ingest rejects it ("beam missing topology block"); the jittered designs carry `topology`. Either Sweep fills `topology` on the reference design or the check accepts `beams[]` alone.
+- **Next:** F13LD.sweep Push to Vault (Phase 3), then Matt's Vault wipe and re-seed through it, then F13LD.lab Push to Vault and the Vault display of Lab results (plan: `F13LD_VAULT_PUSH_PLAN.md`, kept in `docs/`). When Sweep adds Bundle (v0.30.0), check its exports against the bundle structure check.
 
 ## Output summary
 
@@ -61,6 +80,16 @@ After validation, the tool displays:
 | Failed | Designs that failed one or more checks, with reasons logged |
 
 ---
+
+## Tests
+
+Dev-only (`npm install playwright-core`, Chromium via `npx playwright install chromium`). The database is mocked; nothing leaves the machine.
+
+| Script | What it checks |
+|---|---|
+| `node tests/make-fixtures.js` | builds the edge-case, 130-design and no-version fixtures from the real Sweep exports in `tests/fixtures/` |
+| `node tests/parity.js <old-ingest-folder>` | old vs new Ingest on every fixture: per-design status and reason, summary, preview table, every POSTed row; then contributor-after-drop, a duplicate race during insert, the session licence tick |
+| `node tests/push-window.js [out]` | the push window at desktop and phone widths: counts, inline errors, dry run, remembered contributor and tick, Lab push order and rows, no horizontal overflow, no text under 12 px; screenshots to `tests/shots` |
 
 ## Requirements
 

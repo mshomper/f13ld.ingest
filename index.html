@@ -544,7 +544,7 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
       </svg>
       <span class="fh-vault-label">vault</span>
     </div>
-    <span class="fh-version">v0.9.1</span>
+    <span class="fh-version">v0.10.0</span>
     <div class="fh-icon">
       <svg width="18" height="18" viewBox="0 0 40 40">
         <line x1="3" y1="9"  x2="16" y2="20" stroke="#3C3489" stroke-width="1.8" stroke-linecap="round"/>
@@ -720,6 +720,7 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
 
 </div>
 
+<script src="f13ld-vault-push.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════════════
 // F13LD.ingest — public ingest tool for the F13LD design suite
@@ -728,26 +729,18 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Config ─────────────────────────────────────────────────────────────
-var SUPABASE_URL = 'https://axinljpecycnvfncyhfs.supabase.co';
-var SUPABASE_KEY = 'sb_publishable_DAlrNLqbUZiwkaA6wPSMIw_YUNY85LX';
-var TABLE        = 'f13ld_designs';
-var BATCH_SIZE   = 50;
-var LICENSE_TAG  = 'CC0-1.0';
-
-// VF acceptance window (percent). Sparse PI-TPMS designs run < 2.5%.
-// Two-tier floor: anything > VF_MIN passes the volume floor, but designs
-// below VF_LOW_THRESHOLD must additionally be connected in ≥1 axis
-// (connect_idx ≥ MIN_CONNECT_IDX) to rule out disconnected powder.
-var VF_MIN           = 0.50;
-var VF_LOW_THRESHOLD = 1.25;
-var VF_MAX           = 80.0;
-var MIN_CONNECT_IDX  = 0.33;  // 1 of 3 axes — connect_idx scale {0, 0.33, 0.67, 1}
-
-var KNOWN_FAMILIES = ['tpms', 'noise', 'grain', 'beam', 'foam', 'wave', 'bundle'];   // v0.9.0: foam, wave, bundle (Sweep v0.27+)
+// v0.10.0 — the checks, hashing, row builder and insert live in
+// f13ld-vault-push.js (one rule set for Ingest, F13LD.sweep and F13LD.lab).
+var V            = window.F13LDVault;
+var SUPABASE_URL = V.CONFIG.SUPABASE_URL;
+var SUPABASE_KEY = V.CONFIG.SUPABASE_KEY;
+var TABLE        = V.CONFIG.TABLE;
+var BATCH_SIZE   = V.CONFIG.BATCH_SIZE;
 
 // ── State ──────────────────────────────────────────────────────────────
 var parsedFile    = null;     // raw parsed JSON
-var processedRows = [];       // {status, row, reason, design}
+var processedRows = [];       // F13LDVault.analyze items: {index, status, reason, d, hash}
+var lastAnalysis  = null;     // the F13LDVault.analyze result for the loaded file
 var dbConnected   = false;
 
 // Per-context-field "last detected" values from the most recent sweep file.
@@ -928,7 +921,11 @@ function onCtxInput(id) {
   }
   refreshGates();
 }
-function onLicenseChange() { refreshGates(); }
+function onLicenseChange() {
+  // v0.10.0 — remembered for this browser session across every F13LD tool
+  V.setConsent(isLicensed());
+  refreshGates();
+}
 
 // ── Drop-zone file summary string ──────────────────────────────────────
 // e.g. "207 noise · ridged · sweep v0.10.0"  (single family + preset)
@@ -1055,440 +1052,9 @@ function refreshGates() {
   }
 }
 
-// ── Canonical JSON for hashing (stable key order) ──────────────────────
-function canonicalize(v) {
-  if (v === null || typeof v !== 'object') return JSON.stringify(v);
-  if (Array.isArray(v)) return '[' + v.map(canonicalize).join(',') + ']';
-  var keys = Object.keys(v).sort();
-  return '{' + keys.map(function(k){
-    return JSON.stringify(k) + ':' + canonicalize(v[k]);
-  }).join(',') + '}';
-}
-
-async function contentHash(recipe) {
-  var json = canonicalize(recipe);
-  var buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(json));
-  return Array.from(new Uint8Array(buf))
-    .map(function(b){ return b.toString(16).padStart(2, '0'); })
-    .join('');
-}
-
-// ── Per-family validation ──────────────────────────────────────────────
-// Returns null if valid, otherwise a short reason string.
-//
-// IMPORTANT: per-design metrics live in `d.browser`, not `design.homogenization`.
-// The homogenization block in the recipe currently mirrors the *base* recipe's
-// MIL-HS values across every iteration — it's not per-design until the next
-// Sweep version computes Gxy/nu_eff/surface_complexity per iteration.
-function validateDesign(d) {
-  var design = d.design;
-  if (!design)        return 'missing design block';
-  if (!design.family) return 'missing family discriminator';
-  if (KNOWN_FAMILIES.indexOf(design.family) < 0)
-    return 'unknown family "' + design.family + '"';
-
-  var b = d.browser;
-  if (!b) return 'missing browser metrics block (per-design Ex/Ey/Ez/VF)';
-
-  // ── Universal physics — all checks against per-design browser values ─
-  if (typeof b.volume_fraction !== 'number')
-    return 'volume_fraction missing or non-numeric';
-  if (b.volume_fraction <= VF_MIN || b.volume_fraction >= VF_MAX)
-    return 'VF ' + b.volume_fraction.toFixed(2) + '% out of range (' + VF_MIN.toFixed(2) + '–' + VF_MAX + '%)';
-
-  // Sparse-VF connectivity floor: below VF_LOW_THRESHOLD, the design must
-  // be connected in at least one axis (otherwise it's disconnected powder).
-  if (b.volume_fraction < VF_LOW_THRESHOLD) {
-    var ci = b.connect_idx;
-    if (typeof ci !== 'number' || ci < MIN_CONNECT_IDX) {
-      var ciStr = (typeof ci === 'number') ? ci.toFixed(2) : '—';
-      return 'VF ' + b.volume_fraction.toFixed(2) + '% sparse — connect_idx ' +
-             ciStr + ' < ' + MIN_CONNECT_IDX + ' (need ≥1 connected axis)';
-    }
-  }
-
-  // ── Sweep schema version tripwire ───────────────────────────────────
-  // Vault schema v5 prefers v0.14.1+ canonical metrics, but accepts v0.13+
-  // (older exports get nulls for v0.14-only fields like solver_validity,
-  // directionality, cg_iters, cg_converged). Hard-required fields below
-  // were present in v0.13 — exports lacking them are rejected.
-  if (typeof b.linear_cap_active !== 'boolean')
-    return 'missing linear_cap_active — Sweep v0.13+ required';
-  if (typeof b.stiffness_density_norm !== 'number')
-    return 'missing stiffness_density_norm — Sweep v0.13+ required';
-  if (typeof b.H_mean_abs !== 'number')
-    return 'missing H_mean_abs — Sweep v0.13+ required (this looks like a v0.12 export)';
-  if (typeof b.throat_ratio !== 'number')
-    return 'missing throat_ratio — Sweep v0.13+ required';
-  if (typeof b.tortuosity_x !== 'number')
-    return 'missing tortuosity_x — Sweep v0.13+ required';
-
-  // v5: anisotropy is NULLABLE in v0.14.0+ (when fewer than 2 axes percolate).
-  // Older v0.13 exports never produce null, so null indicates v0.14+ export.
-  if (b.anisotropy !== null && typeof b.anisotropy !== 'number')
-    return 'anisotropy must be a number or null';
-  if (typeof b.anisotropy === 'number' && b.anisotropy < 1.0 - 0.005)
-    return 'anisotropy ' + b.anisotropy.toFixed(2) + ' < 1.0 (impossible)';
-
-  // v5: solver_validity validation (v0.14.0+ only — accept missing for v0.13)
-  if (b.solver_validity !== undefined && b.solver_validity !== null) {
-    if (b.solver_validity !== 'valid' &&
-        b.solver_validity !== 'partial' &&
-        b.solver_validity !== 'invalid')
-      return "solver_validity must be 'valid', 'partial', or 'invalid'";
-  }
-
-  // v5: cg_iters / cg_converged validation (v0.14.0+ only)
-  if (b.cg_iters !== undefined && b.cg_iters !== null) {
-    if (typeof b.cg_iters !== 'number' || b.cg_iters < 0 || b.cg_iters !== Math.floor(b.cg_iters))
-      return 'cg_iters must be a non-negative integer';
-  }
-  if (b.cg_converged !== undefined && b.cg_converged !== null) {
-    if (typeof b.cg_converged !== 'boolean')
-      return 'cg_converged must be a boolean';
-  }
-
-  // Stiffness sanity — switched from Ex_GPa to Ex_norm in v0.7.0 since
-  // norm fields are guaranteed and the GPa fields are no longer stored.
-  // Same physics either way: negative stiffness is impossible.
-  var axes = ['Ex_norm', 'Ey_norm', 'Ez_norm'];
-  for (var i = 0; i < axes.length; i++) {
-    var v = b[axes[i]];
-    if (typeof v !== 'number') return axes[i] + ' missing or non-numeric';
-    if (v < 0)                 return axes[i] + ' = ' + v + ' (negative — impossible)';
-  }
-
-  // Anisotropy consistency — only enforced where ≥ 2 axes are connected
-  // AND anisotropy is not null. Null anisotropy from v0.14+ means fewer
-  // than 2 axes percolate at the canonical (hi-res) level — consistency
-  // check doesn't apply.
-  if (typeof b.anisotropy === 'number') {
-    var connected = axes.map(function(a){ return b[a]; }).filter(function(e){ return e > 1e-7; });
-    if (connected.length >= 2) {
-      var computed = Math.max.apply(null, connected) / Math.min.apply(null, connected);
-      if (Math.abs(computed - b.anisotropy) / Math.max(computed, 0.001) > 0.30)
-        return 'anisotropy ' + b.anisotropy.toFixed(2) + ' inconsistent with E_x/E_y/E_z (computed ' + computed.toFixed(2) + ')';
-    }
-  }
-
-  // ── Family-specific recipe structure (still on the recipe, not browser) ─
-  if (design.family === 'tpms') {
-    if (!design.surface) return 'TPMS missing surface block';
-    if (design.surface.type === 'terms' && (!Array.isArray(design.surface.terms) || design.surface.terms.length === 0))
-      return 'TPMS surface.terms is empty — not reconstructable';
-  }
-  if (design.family === 'noise') {
-    if (!design.surface) return 'noise missing surface block';
-    if (!design.surface.noise_type) return 'noise missing noise_type';
-  }
-  if (design.family === 'grain') {
-    if (!design.field) return 'grain missing field block';
-    if (!design.field.type) return 'grain missing field.type';
-  }
-  if (design.family === 'beam') {
-    // Beam recipes are structurally distinct from surface/field families:
-    // discriminators live in `topology` (preset name + beam count) and the
-    // strut endpoints sit in a top-level `beams[]` array. Both are required
-    // for F13LD.mesh to reconstruct the lattice.
-    if (!design.topology) return 'beam missing topology block';
-    if (!Array.isArray(design.beams) || design.beams.length === 0)
-      return 'beam missing beams[] array — not reconstructable';
-  }
-
-  // v0.9.0 — the families Sweep added in v0.27+ (F13LD.foam / .wave / .bundle exports)
-  if (design.family === 'foam') {
-    if (!design.seeds) return 'foam missing seeds block';
-    if (design.domain && design.domain.periodic === false) return 'foam is not periodic — not a valid unit cell';
-    var sd = design.seeds;
-    var hasPos = Array.isArray(sd.positions) && sd.positions.length >= 3;
-    if (!hasPos && !(sd.mode && (sd.count > 0)))
-      return 'foam has neither seed positions nor seed settings to rebuild them — not reconstructable';
-  }
-  if (design.family === 'wave') {
-    if (!design.field || !Array.isArray(design.field.modes) || design.field.modes.length === 0)
-      return 'wave missing field.modes — not reconstructable';
-    // v0.9.1 — one wave cell is periodic only with whole-number mode indices
-    // (a fractional index repeats over several cells; Sweep, Lab and F13LD.wave
-    // solve one cell), as F13LD.sweep v0.29.0 refuses them at load
-    for (var wi = 0; wi < design.field.modes.length; wi++) {
-      var wm = design.field.modes[wi] || {}, wk = ['n', 'm', 'p'];
-      for (var wj = 0; wj < 3; wj++) {
-        var wv = wm[wk[wj]];
-        if (typeof wv !== 'number' || !isFinite(wv)) return 'wave mode ' + (wi + 1) + ' missing its ' + wk[wj] + ' index';
-        if (Math.abs(wv - Math.round(wv)) > 1e-9)
-          return 'wave mode ' + (wi + 1) + ' has ' + wk[wj] + ' = ' + wv + ' — fractional indices are not one periodic cell';
-      }
-    }
-    if (!design.geometry) return null;   // wave keeps its settings in field
-  }
-  if (design.family === 'bundle') {
-    if (!design.surface || !design.surface.structure) return 'bundle missing surface.structure';
-  }
-
-  if (!design.geometry) return 'missing geometry block';
-
-  return null; // valid
-}
-
-// ── Server policy pre-flight ───────────────────────────────────────────
-// Mirrors the RLS WITH CHECK predicate on f13ld_designs so a row that
-// would fail server-side gets flagged here with a clear field name
-// instead of bouncing as a generic 42501 mid-batch. Update this in
-// lockstep with the policy if the policy ever changes.
-//
-// Policy (as of 2026-05): all of content_hash, family, schema_version,
-// domain, contributor_name, contributor_contact must be non-empty
-// strings; license must be non-null; family must be in KNOWN_FAMILIES.
-//
-// Returns null if the row would pass server-side, otherwise a short
-// reason string in the same shape as validateDesign().
-function policyCheckRow(row) {
-  function nonEmpty(v) { return typeof v === 'string' && v.length > 0; }
-  if (!nonEmpty(row.content_hash))
-    return 'policy: content_hash empty (row builder bug)';
-  if (!nonEmpty(row.family))
-    return 'policy: family empty';
-  if (KNOWN_FAMILIES.indexOf(row.family) < 0)
-    return 'policy: family "' + row.family + '" not in {' +
-           KNOWN_FAMILIES.join(', ') + '} — likely stale cached ingest';
-  if (!nonEmpty(row.schema_version))
-    return 'policy: schema_version empty — sweep meta missing tool_version';
-  if (!nonEmpty(row.domain))
-    return 'policy: domain empty (Domain field blank?)';
-  if (!nonEmpty(row.contributor_name))
-    return 'policy: contributor_name empty';
-  if (!nonEmpty(row.contributor_contact))
-    return 'policy: contributor_contact empty';
-  if (row.license == null)
-    return 'policy: license null';
-  return null;
-}
-
-// ── Build the row that gets POSTed to Supabase ─────────────────────────
-function buildRow(d, hash, meta, contributor, context, sweepContext) {
-  var design  = d.design;
-  var browser = d.browser || {};
-
-  // ── Material card: jsonb carrying the full material as a unit ──────
-  // Pulled straight from the sweep context (cached on file drop). The
-  // ingest UI no longer asks the contributor to type material info —
-  // the file is the source of truth.
-  var materialCard = lastDetectedMaterialProps || null;
-
-  // ── Cap-affected NULL-ing ──────────────────────────────────────────
-  // When linear_cap_active === true, the compliance metrics come back
-  // pinned to the structural-foam ceiling and would skew histograms.
-  // NULL them here; the flag itself is preserved for audit. Geometry,
-  // stiffness, and thermal stay populated since the cap doesn't touch
-  // them. Pre-cap values remain recoverable from ex_norm × e_solid_gpa.
-  var capActive = browser.linear_cap_active === true;
-  function nullIfCapped(v) { return capActive ? null : (v ?? null); }
-
-  // ── Pore percentile normalization (μm → fraction-of-cell) ──────────
-  // Sweep emits pore_size_p10/p50/p90 in μm. Schema stores them on the
-  // same cell-invariant scale as pore_size_norm, so we divide here.
-  // Returns null if the source field is missing OR cell size is missing.
-  var cellUm = (lastDetectedCellSizeMm != null) ? lastDetectedCellSizeMm * 1000 : null;
-  function poreUmToNorm(umVal) {
-    if (typeof umVal !== 'number' || cellUm == null || cellUm <= 0) return null;
-    return umVal / cellUm;
-  }
-
-  // ── Transport rollups (per-axis → min/max/avg) ─────────────────────
-  // Returns null if any axis is missing — partial rollups would be misleading.
-  function tripleRollup(x, y, z, op) {
-    if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') return null;
-    if (op === 'min') return Math.min(x, y, z);
-    if (op === 'max') return Math.max(x, y, z);
-    if (op === 'avg') return (x + y + z) / 3;
-    return null;
-  }
-  var tortMin    = tripleRollup(browser.tortuosity_x, browser.tortuosity_y, browser.tortuosity_z, 'min');
-  var tortAvg    = tripleRollup(browser.tortuosity_x, browser.tortuosity_y, browser.tortuosity_z, 'avg');
-  var dEffMaxN   = tripleRollup(browser.D_eff_x_norm, browser.D_eff_y_norm, browser.D_eff_z_norm, 'max');
-  var dEffAvgN   = tripleRollup(browser.D_eff_x_norm, browser.D_eff_y_norm, browser.D_eff_z_norm, 'avg');
-  // v4: thermal rollups for the thermal Z-compound
-  var keffMaxN   = tripleRollup(browser.keff_x_norm, browser.keff_y_norm, browser.keff_z_norm, 'max');
-  var keffAvgN   = tripleRollup(browser.keff_x_norm, browser.keff_y_norm, browser.keff_z_norm, 'avg');
-
-  // ── Recognized field set — used to compute metrics_extended sidecar ─
-  // Anything in browser that ISN'T promoted to a first-class column
-  // and ISN'T a dimensional original (which we drop) lands in
-  // metrics_extended. This means future sweep versions can add new
-  // browser fields without an ingest update.
-  var FIRST_CLASS = {
-    // Geometry — v5: axial_dominance dropped, directionality added (v0.14.0)
-    volume_fraction:1, connect_idx:1, perc_idx:1, stiff_axis:1,
-    anisotropy:1, directionality:1, ortho_contrast:1,
-    aniso_efficiency:1, surface_complexity:1,
-    // Stiffness — Es-decoupled
-    Ex_norm:1, Ey_norm:1, Ez_norm:1, stiffness_density_norm:1,
-    // Thermal — ks-decoupled
-    keff_x_norm:1, keff_y_norm:1, keff_z_norm:1, thermal_anisotropy:1,
-    // Compliance — load-decoupled
-    microstrain_x_per_GPa:1, microstrain_y_per_GPa:1, microstrain_z_per_GPa:1,
-    microstrain_avg_per_GPa:1, U_compliance:1,
-    // Pore — throat_efficiency dropped in v0.13, throat_ratio added
-    pore_size_norm:1, throat_size_norm:1, throat_ratio:1,
-    pore_size_p10:1, pore_size_p50:1, pore_size_p90:1,  // consumed by poreUmToNorm
-    pore_size_cv:1,
-    // Curvature — v0.13 redefined h_mean, added H_mean_abs and H_std
-    H_mean:1, H_mean_abs:1, H_std:1,
-    K_gauss_mean:1, curvature_uniformity:1, MIH:1,
-    // Topology — only genus_per_cell promoted; raw genus & euler_char go to jsonb
-    genus_per_cell:1,
-    // Transport rollups consume per-axis values → marked first-class so they
-    // don't double up in metrics_extended
-    tortuosity_x:1, tortuosity_y:1, tortuosity_z:1,
-    D_eff_x_norm:1, D_eff_y_norm:1, D_eff_z_norm:1,
-    // Solver diagnostics & cap flags
-    linear_cap_active:1, eps_yield_um_used:1, linear_cap_kind:1,
-    degenerate:1,                                    // v4: solver degeneracy flag
-    solver_validity:1, cg_iters:1, cg_converged:1,   // v5: v0.14.0 connectivity-informed solver state
-    // Dimensional originals — explicitly dropped (recoverable via view)
-    Ex_GPa:1, Ey_GPa:1, Ez_GPa:1, stiffness_density:1,
-    keff_x:1, keff_y:1, keff_z:1, k_density:1,
-    U_strain:1, microstrain_x:1, microstrain_y:1, microstrain_z:1, microstrain_avg:1,
-    pore_size:1, throat_size:1
-  };
-
-  // metrics_extended absorbs:
-  //   - per-axis breakdowns we explicitly send to jsonb (connect_x/y/z,
-  //     perc_x/y/z, tortuosity_x/y/z, D_eff_x/y/z_norm) — these aren't
-  //     in FIRST_CLASS for "send to extended" purposes, so we add them
-  //     manually below
-  //   - euler_char and genus (raw) — kept for audit, not promoted
-  //   - any future sweep field not yet in FIRST_CLASS
-  var metricsExtended = {};
-  Object.keys(browser).forEach(function(k){
-    if (!FIRST_CLASS[k]) metricsExtended[k] = browser[k];
-  });
-  // Per-axis values that ARE in FIRST_CLASS (because they feed rollups)
-  // but should ALSO land in metrics_extended for power users / audit.
-  var ALSO_TO_EXTENDED = [
-    'connect_x', 'connect_y', 'connect_z',
-    'perc_x', 'perc_y', 'perc_z',
-    'tortuosity_x', 'tortuosity_y', 'tortuosity_z',
-    'D_eff_x_norm', 'D_eff_y_norm', 'D_eff_z_norm',
-    'euler_char', 'genus'
-  ];
-  ALSO_TO_EXTENDED.forEach(function(k){
-    if (browser[k] !== undefined) metricsExtended[k] = browser[k];
-  });
-
-  // ── Build the row ───────────────────────────────────────────────────
-
-  return {
-    // Identity
-    content_hash:        hash,
-    schema_version:      meta.tool_version || meta.version || null,
-    family:              design.family,
-
-    // Provenance
-    source_tool:         meta.tool         || null,
-    source_version:      meta.tool_version || meta.version || null,
-    exported_at:         meta.exported     || null,
-    preset:              design.meta?.preset || meta.preset || null,
-    solver:              meta.solver       || null,
-
-    // Contributor
-    contributor_name:    contributor.name,
-    contributor_contact: contributor.contact,
-    contributor_notes:   contributor.notes || null,
-
-    // Application context — provenance for re-derivation
-    domain:              context.domain,
-    material:            materialCard,
-    e_solid_gpa:         (materialCard && materialCard.E_GPa != null)
-                           ? materialCard.E_GPa
-                           : null,
-    sigma_ref_gpa:       lastDetectedSigmaRefGPa,
-    cell_size_mm:        lastDetectedCellSizeMm,
-    voxel_to_um:         lastDetectedVoxelToUm,
-
-    // Geometry — material-agnostic (axial_dominance dropped in v0.14.0,
-    // directionality added). v0.14.1 makes anisotropy + aniso_efficiency
-    // nullable when fewer than 2 axes percolate (mathematically undefined).
-    volume_fraction:     browser.volume_fraction   ?? null,
-    connect_idx:         browser.connect_idx       ?? null,
-    perc_idx:            browser.perc_idx          ?? null,
-    stiff_axis:          browser.stiff_axis        ?? null,
-    anisotropy:          browser.anisotropy        ?? null,
-    directionality:      browser.directionality    ?? null,   // v5: NEW (replaces axial_dominance)
-    ortho_contrast:      browser.ortho_contrast    ?? null,
-    aniso_efficiency:    browser.aniso_efficiency  ?? null,
-    surface_complexity:  browser.surface_complexity ?? null,
-
-    // Stiffness — Es-decoupled
-    ex_norm:                 browser.Ex_norm                ?? null,
-    ey_norm:                 browser.Ey_norm                ?? null,
-    ez_norm:                 browser.Ez_norm                ?? null,
-    stiffness_density_norm:  browser.stiffness_density_norm ?? null,
-
-    // Thermal — ks-decoupled (max/avg rollups added in v4)
-    keff_x_norm:             browser.keff_x_norm        ?? null,
-    keff_y_norm:             browser.keff_y_norm        ?? null,
-    keff_z_norm:             browser.keff_z_norm        ?? null,
-    keff_max_norm:           keffMaxN,
-    keff_avg_norm:           keffAvgN,
-    thermal_anisotropy:      browser.thermal_anisotropy ?? null,
-
-    // Compliance — load-decoupled (NULLed when cap active)
-    microstrain_x_per_gpa:   nullIfCapped(browser.microstrain_x_per_GPa),
-    microstrain_y_per_gpa:   nullIfCapped(browser.microstrain_y_per_GPa),
-    microstrain_z_per_gpa:   nullIfCapped(browser.microstrain_z_per_GPa),
-    microstrain_avg_per_gpa: nullIfCapped(browser.microstrain_avg_per_GPa),
-    u_compliance:            nullIfCapped(browser.U_compliance),
-
-    // Pore architecture — cell-decoupled (percentiles normalized at ingest;
-    // throat_efficiency dropped in v0.13, replaced by raw throat_ratio)
-    pore_size_norm:          browser.pore_size_norm    ?? null,
-    pore_size_p10_norm:      poreUmToNorm(browser.pore_size_p10),
-    pore_size_p50_norm:      poreUmToNorm(browser.pore_size_p50),
-    pore_size_p90_norm:      poreUmToNorm(browser.pore_size_p90),
-    pore_size_cv:            browser.pore_size_cv      ?? null,
-    throat_size_norm:        browser.throat_size_norm  ?? null,
-    throat_ratio:            browser.throat_ratio      ?? null,
-
-    // Curvature — v0.13 redefined h_mean as signed; raw H_mean_abs/H_std added
-    h_mean:                  browser.H_mean               ?? null,
-    h_mean_abs:              browser.H_mean_abs           ?? null,
-    h_std:                   browser.H_std                ?? null,
-    k_gauss_mean:            browser.K_gauss_mean         ?? null,
-    curvature_uniformity:    browser.curvature_uniformity ?? null,
-    mih:                     browser.MIH                  ?? null,
-
-    // Topology — only genus_per_cell promoted; raw euler_char/genus → metrics_extended
-    genus_per_cell:          browser.genus_per_cell ?? null,
-
-    // Transport — rollups (per-axis → metrics_extended)
-    tortuosity_min:          tortMin,
-    tortuosity_avg:          tortAvg,
-    d_eff_max_norm:          dEffMaxN,
-    d_eff_avg_norm:          dEffAvgN,
-
-    // Solver diagnostics & cap flags (degenerate added in v4;
-    // solver_validity/cg_iters/cg_converged added in v5 from sweep v0.14.0)
-    linear_cap_active:       browser.linear_cap_active === true,
-    eps_yield_um_used:       browser.eps_yield_um_used ?? null,
-    linear_cap_kind:         browser.linear_cap_kind   ?? null,
-    degenerate:              browser.degenerate === true,
-    solver_validity:         browser.solver_validity   ?? null,   // v5: 'valid'|'partial'|'invalid'|null(v0.13)
-    cg_iters:                browser.cg_iters          ?? null,   // v5: total CG iterations
-    cg_converged:            (typeof browser.cg_converged === 'boolean')
-                               ? browser.cg_converged
-                               : null,                            // v5: tri-state (true|false|null for v0.13)
-
-    // Future-proofing — per-axis breakdowns + any unrecognized fields
-    metrics_extended:        metricsExtended,
-
-    // Full provenance blobs
-    recipe:              design,
-    context:             sweepContext || null,
-
-    license:             LICENSE_TAG
-  };
-}
+// ── Validation, hashing, row building ──────────────────────────────────
+// v0.10.0 — validateDesign, policyCheckRow, buildRow, canonicalize and
+// contentHash moved to f13ld-vault-push.js (F13LDVault.*), unchanged.
 
 // ── File processing ────────────────────────────────────────────────────
 async function processFile(file) {
@@ -1569,65 +1135,38 @@ async function processFile(file) {
         (lastDetectedVoxelToUm ?? '?') + ' μm');
   }
 
-  var contributor = getContributor();
-  var context     = getContext();
-
-  // Fetch existing hashes to detect duplicates
+  // v0.10.0 — checks, hashing and the duplicate check run in
+  // F13LDVault.analyze (f13ld-vault-push.js). It asks the database only
+  // about this file's hashes, so the 1,000-row response limit no longer
+  // hides duplicates. The contributor and domain are applied when Insert
+  // is pressed, so they can be filled in after the drop.
   log('info', 'Checking for duplicates against F13LD.vault…');
-  var existingHashes = new Set();
+  var analysis;
   try {
-    var res = await fetch(
-      SUPABASE_URL + '/rest/v1/' + TABLE + '?select=content_hash',
-      { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } }
-    );
-    if (res.ok) {
-      var rows = await res.json();
-      rows.forEach(function(r){ existingHashes.add(r.content_hash); });
-      log('info', existingHashes.size + ' designs already in F13LD.vault');
-    }
+    analysis = await V.analyze(json);
   } catch (e) {
-    log('warn', 'Could not fetch existing hashes: ' + e.message);
+    log('error', e.message);
+    return;
   }
+  lastAnalysis = analysis;
+  if (!analysis.hashCheck.ok) {
+    log('warn', 'Could not fetch existing hashes: ' + analysis.hashCheck.error);
+  } else {
+    log('info', analysis.hashCheck.found + ' of this file\'s designs already in F13LD.vault');
+  }
+  V.countDesigns().then(function(n) {
+    if (n != null) log('info', 'F13LD.vault holds ' + n + ' designs');
+  });
 
-  // Process each design
-  processedRows = [];
-  var nValid = 0, nDupe = 0, nInvalid = 0;
+  processedRows = analysis.items;
+  var nValid   = analysis.counts.valid;
+  var nDupe    = analysis.counts.dupe;
+  var nInvalid = analysis.counts.invalid;
   var familyCounts = { tpms: 0, noise: 0, grain: 0, beam: 0 };
-
-  for (var i = 0; i < json.designs.length; i++) {
-    var d = json.designs[i];
-
-    var reason = validateDesign(d);
-    if (reason) {
-      processedRows.push({ status: 'invalid', reason: reason, d: d });
-      nInvalid++;
-      continue;
-    }
-
-    var hash = await contentHash(d.design);
-    if (existingHashes.has(hash)) {
-      processedRows.push({ status: 'dupe', reason: 'already in F13LD.vault', hash: hash, d: d });
-      nDupe++;
-      continue;
-    }
-
-    var row = buildRow(d, hash, meta, contributor, context, json.context || null);
-
-    // Pre-flight against the RLS WITH CHECK predicate. If the server
-    // would reject this row, fail fast here with a field-level reason
-    // instead of letting the batch POST surface as a generic 42501.
-    var policyReason = policyCheckRow(row);
-    if (policyReason) {
-      processedRows.push({ status: 'invalid', reason: policyReason, d: d });
-      nInvalid++;
-      continue;
-    }
-
-    processedRows.push({ status: 'valid', row: row, d: d, hash: hash });
-    existingHashes.add(hash); // prevent intra-file dupes
-    familyCounts[d.design.family] = (familyCounts[d.design.family] || 0) + 1;
-    nValid++;
-  }
+  processedRows.forEach(function(p) {
+    if (p.status === 'valid')
+      familyCounts[p.d.design.family] = (familyCounts[p.d.design.family] || 0) + 1;
+  });
 
   log(nInvalid > 0 ? 'warn' : 'success',
       'Validated — ' + nValid + ' valid · ' + nDupe + ' duplicates · ' + nInvalid + ' invalid');
@@ -1721,9 +1260,19 @@ async function runInsert() {
     log('error', 'License acknowledgment is required.');
     return;
   }
-  var validRows = processedRows
-    .filter(function(p){ return p.status === 'valid'; })
-    .map(function(p){ return p.row; });
+  if (!lastAnalysis) return;
+
+  // v0.10.0 — rows are built now, with the contributor and domain as they
+  // stand when Insert is pressed. Ingest drops are provenance "file".
+  var built = V.buildRows(lastAnalysis, {
+    contributor:    getContributor(),
+    domain:         getContext().domain,
+    provenanceKind: 'file'
+  });
+  built.rejected.forEach(function(r) {
+    log('error', 'Design ' + (r.item.d.id ?? r.item.index) + ' not sent: ' + r.reason);
+  });
+  var validRows = built.rows;
   if (validRows.length === 0) return;
 
   var insertBtn = document.getElementById('insertBtn');
@@ -1733,40 +1282,15 @@ async function runInsert() {
 
   log('accent', 'Inserting ' + validRows.length + ' designs in batches of ' + BATCH_SIZE + '…');
 
-  var inserted = 0, failed = 0;
-
-  for (var i = 0; i < validRows.length; i += BATCH_SIZE) {
-    var batch = validRows.slice(i, i + BATCH_SIZE);
-    try {
-      var res = await fetch(
-        SUPABASE_URL + '/rest/v1/' + TABLE,
-        {
-          method: 'POST',
-          headers: {
-            apikey:        SUPABASE_KEY,
-            Authorization: 'Bearer ' + SUPABASE_KEY,
-            'Content-Type': 'application/json',
-            Prefer:        'return=minimal'
-          },
-          body: JSON.stringify(batch)
-        }
-      );
-      if (res.ok) {
-        inserted += batch.length;
-        log('info', 'Batch ' + (Math.floor(i / BATCH_SIZE) + 1) + ' — inserted ' + batch.length + ' rows');
-      } else {
-        var errText = await res.text();
-        failed += batch.length;
-        log('error', 'Batch ' + (Math.floor(i / BATCH_SIZE) + 1) + ' failed: ' + errText.slice(0, 160));
-      }
-    } catch (e) {
-      failed += batch.length;
-      log('error', 'Batch ' + (Math.floor(i / BATCH_SIZE) + 1) + ' error: ' + e.message);
+  var out = await V.insertDesigns(validRows, {
+    onProgress: function(e) {
+      log(e.level, e.message);
+      if (e.total) document.getElementById('progressFill').style.width =
+        Math.min(Math.round(e.done / e.total * 100), 100) + '%';
     }
-
-    var pct = Math.round((i + BATCH_SIZE) / validRows.length * 100);
-    document.getElementById('progressFill').style.width = Math.min(pct, 100) + '%';
-  }
+  });
+  var inserted = out.inserted, failed = out.failed;
+  if (out.duplicates) log('warn', out.duplicates + ' designs were already in F13LD.vault — skipped');
 
   document.getElementById('progressFill').style.width = '100%';
 
@@ -1786,6 +1310,7 @@ async function runInsert() {
 function resetTool() {
   parsedFile    = null;
   processedRows = [];
+  lastAnalysis  = null;
   document.getElementById('summaryGrid').style.display  = 'none';
   document.getElementById('previewPanel').style.display = 'none';
   document.getElementById('actionBar').style.display    = 'none';
@@ -1836,6 +1361,7 @@ dz.addEventListener('drop', function(e) {
 
 // ── Init ───────────────────────────────────────────────────────────────
 loadContributor();
+if (V.hasConsent()) document.getElementById('cLicense').checked = true;
 refreshGates();
 checkConnection();
 </script>
