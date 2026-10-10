@@ -544,7 +544,7 @@ tbody td{padding:6px 10px;color:var(--text);white-space:nowrap}
       </svg>
       <span class="fh-vault-label">vault</span>
     </div>
-    <span class="fh-version">v0.9.0</span>
+    <span class="fh-version">v0.9.1</span>
     <div class="fh-icon">
       <svg width="18" height="18" viewBox="0 0 40 40">
         <line x1="3" y1="9"  x2="16" y2="20" stroke="#3C3489" stroke-width="1.8" stroke-linecap="round"/>
@@ -1207,6 +1207,18 @@ function validateDesign(d) {
   if (design.family === 'wave') {
     if (!design.field || !Array.isArray(design.field.modes) || design.field.modes.length === 0)
       return 'wave missing field.modes — not reconstructable';
+    // v0.9.1 — one wave cell is periodic only with whole-number mode indices
+    // (a fractional index repeats over several cells; Sweep, Lab and F13LD.wave
+    // solve one cell), as F13LD.sweep v0.29.0 refuses them at load
+    for (var wi = 0; wi < design.field.modes.length; wi++) {
+      var wm = design.field.modes[wi] || {}, wk = ['n', 'm', 'p'];
+      for (var wj = 0; wj < 3; wj++) {
+        var wv = wm[wk[wj]];
+        if (typeof wv !== 'number' || !isFinite(wv)) return 'wave mode ' + (wi + 1) + ' missing its ' + wk[wj] + ' index';
+        if (Math.abs(wv - Math.round(wv)) > 1e-9)
+          return 'wave mode ' + (wi + 1) + ' has ' + wk[wj] + ' = ' + wv + ' — fractional indices are not one periodic cell';
+      }
+    }
     if (!design.geometry) return null;   // wave keeps its settings in field
   }
   if (design.family === 'bundle') {
