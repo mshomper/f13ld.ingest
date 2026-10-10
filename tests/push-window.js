@@ -41,7 +41,7 @@ async function setup(browser, width, height, state) {
 
 async function layoutCheck(page, label) {
   const r = await page.evaluate(() => {
-    const box = document.querySelector('.f13v');
+    const box = document.querySelector('.f13vp');
     const over = [];
     box.querySelectorAll('*').forEach((el) => {
       if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible' && el.clientWidth > 0) over.push(el.className || el.tagName);
@@ -70,43 +70,43 @@ async function layoutCheck(page, label) {
     await page.selectOption('#fx', 'tests/fixtures/edge-cases.json');
     await page.waitForFunction(() => /edge-cases/.test(document.getElementById('fxInfo').textContent));
     await page.click('#goSweep');
-    await page.waitForSelector('#f13v-name');
-    await page.click('.f13v-det summary');
+    await page.waitForSelector('#f13vp-name');
+    await page.click('.f13vp-det summary');
     await layoutCheck(page, tag + ' form');
     await page.screenshot({ path: path.join(OUT, tag + '-1-form.png') });
-    const stats = await page.$$eval('.f13v-stat b', (els) => els.map((e) => e.textContent));
+    const stats = await page.$$eval('.f13vp-stat b', (els) => els.map((e) => e.textContent));
     check(tag + ': edge-case counts ready / in Vault / failed', stats.join(',') === '7,1,17', stats.join(','));
 
     // validation: push with nothing filled
-    await page.fill('#f13v-name', ''); await page.fill('#f13v-contact', '');
-    await page.click('.f13v-ft .f13v-btn');
-    const errs = await page.$$eval('.f13v-f .err', (els) => els.map((e) => e.textContent).filter(Boolean));
+    await page.fill('#f13vp-name', ''); await page.fill('#f13vp-contact', '');
+    await page.click('.f13vp-ft .f13vp-btn');
+    const errs = await page.$$eval('.f13vp-f .err', (els) => els.map((e) => e.textContent).filter(Boolean));
     check(tag + ': empty fields stop the push with inline errors', errs.length >= 2 && st.posts.length === 0, errs.join(' / '));
     await page.screenshot({ path: path.join(OUT, tag + '-2-errors.png') });
 
-    await page.fill('#f13v-name', 'Demo Tester');
-    await page.fill('#f13v-contact', 'demo@example.com');
-    await page.check('#f13v-cc');
-    await page.click('.f13v-ft .f13v-btn');
+    await page.fill('#f13vp-name', 'Demo Tester');
+    await page.fill('#f13vp-contact', 'demo@example.com');
+    await page.check('#f13vp-cc');
+    await page.click('.f13vp-ft .f13vp-btn');
     await page.waitForSelector('[data-close]');
     await layoutCheck(page, tag + ' done');
     await page.screenshot({ path: path.join(OUT, tag + '-3-done.png') });
-    const doneText = await page.textContent('.f13v-bd');
+    const doneText = await page.textContent('.f13vp-bd');
     check(tag + ': dry run sends nothing', st.posts.length === 0 && /would be added/.test(doneText), st.posts.length + ' posts');
     await page.click('[data-close]');
-    await page.waitForFunction(() => !document.querySelector('.f13v-scrim'));
+    await page.waitForFunction(() => !document.querySelector('.f13vp-scrim'));
 
     // ── Lab push: contributor remembered, licence remembered, Lab solves ──
     await page.selectOption('#fx', 'tests/fixtures/tpms-gyroid-sheet.json');
     await page.waitForFunction(() => /tpms-gyroid/.test(document.getElementById('fxInfo').textContent));
     await page.click('#goLab');
-    await page.waitForSelector('#f13v-name');
-    const remembered = await page.evaluate(() => [document.getElementById('f13v-name').value, document.getElementById('f13v-cc').checked]);
+    await page.waitForSelector('#f13vp-name');
+    const remembered = await page.evaluate(() => [document.getElementById('f13vp-name').value, document.getElementById('f13vp-cc').checked]);
     check(tag + ': contributor and licence tick remembered', remembered[0] === 'Demo Tester' && remembered[1] === true, JSON.stringify(remembered));
     await layoutCheck(page, tag + ' lab form');
     await page.screenshot({ path: path.join(OUT, tag + '-4-lab.png') });
     await page.keyboard.press('Escape');
-    await page.waitForFunction(() => !document.querySelector('.f13v-scrim'));
+    await page.waitForFunction(() => !document.querySelector('.f13vp-scrim'));
     check(tag + ': Escape closes the window', true);
 
     // ── Mocked real push of a Lab run (not dry run) ──
@@ -116,8 +116,8 @@ async function layoutCheck(page, label) {
           labResults: [0, 1].map((i) => ({ designIndex: i, result: { lab_version: '0.27.0', grid_n: 64, ex_norm: 0.1, extra_thing: 3 } })) });
       });
     });
-    await page.waitForSelector('#f13v-name');
-    await page.click('.f13v-ft .f13v-btn');
+    await page.waitForSelector('#f13vp-name');
+    await page.click('.f13vp-ft .f13vp-btn');
     await page.waitForSelector('[data-close]');
     const des = st.posts.filter((p) => p.table === 'f13ld_designs').flatMap((p) => p.rows);
     const lab = st.posts.filter((p) => p.table === 'f13ld_lab_results').flatMap((p) => p.rows);

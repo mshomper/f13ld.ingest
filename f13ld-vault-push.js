@@ -23,6 +23,9 @@
        browser session)
      · openPushDialog(opts) the push window Sweep and Lab show
 
+   CSS classes and ids use the prefix f13vp- (v1.0.1: f13v- clashed with the
+   shared F13LD-VIEW block, which owns .f13v in every design tool).
+
    Database (2026-10-10 migration): the public key reads named columns
    only (never contributor_contact), inserts, and cannot update, delete
    or truncate. f13ld_lab_results rows need a design row with the same
@@ -34,7 +37,7 @@
    ============================================================ */
 (function (root) {
 
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 
 // ── Config ─────────────────────────────────────────────────────────────
 var SUPABASE_URL = 'https://axinljpecycnvfncyhfs.supabase.co';
@@ -868,77 +871,77 @@ var ICON = {
   alert: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4l9 15.5H3L12 4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="16.9" r="1.1" fill="currentColor"/></svg>',
   chev:  '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   out:   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M17 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  spin:  '<svg class="f13v-spin" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2.2"/><path d="M12 4a8 8 0 0 1 8 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'
+  spin:  '<svg class="f13vp-spin" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2.2"/><path d="M12 4a8 8 0 0 1 8 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'
 };
 
 var CSS = [
-'.f13v-scrim{position:fixed;inset:0;z-index:2147483000;background:rgba(3,5,8,.72);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;overflow:hidden}',
-'.f13v{--a:#c8f542;--g:#06080c;--p:#0d1117;--p2:#131a22;--l:#232c37;--t:#e7ecef;--m:#8b97a3;--ok:#1D9E75;--bad:#e06a6f;--warn:#e0b45a;',
+'.f13vp-scrim{position:fixed;inset:0;z-index:2147483000;background:rgba(3,5,8,.72);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;overflow:hidden}',
+'.f13vp{--a:#c8f542;--g:#06080c;--p:#0d1117;--p2:#131a22;--l:#232c37;--t:#e7ecef;--m:#8b97a3;--ok:#1D9E75;--bad:#e06a6f;--warn:#e0b45a;',
 'font-family:"Exo 2",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.45;color:var(--t);background:var(--p);border:1px solid var(--l);border-radius:14px;',
 'width:100%;max-width:560px;max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}',
-'.f13v *{box-sizing:border-box}',
+'.f13vp *{box-sizing:border-box}',
 // host pages (Sweep, Lab) style button/input globally; reset what leaks in
-'.f13v button,.f13v input,.f13v a{margin:0;box-shadow:none;text-transform:none;letter-spacing:normal;min-width:0;max-width:none;height:auto;line-height:1.2}',
-'.f13v svg{flex:none;display:block}',
-'.f13v :focus-visible{outline:2px solid var(--a);outline-offset:2px}',
-'.f13v-hd{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--l)}',
-'.f13v-hd .ic{color:var(--a);display:flex}',
-'.f13v-ttl{font-size:16px;font-weight:600;letter-spacing:.01em}',
-'.f13v-sub{font-size:12px;color:var(--m);font-family:"IBM Plex Mono",ui-monospace,monospace;overflow-wrap:anywhere}',
-'.f13v-x{margin-left:auto;background:none;border:1px solid transparent;color:var(--m);border-radius:8px;width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}',
-'.f13v-x:hover{color:var(--t);border-color:var(--l)}',
-'.f13v-hd .f13v-x{margin-left:auto}',
-'.f13v-bd{padding:16px 18px;overflow-y:auto;overflow-x:hidden;flex:1 1 auto;display:flex;flex-direction:column;gap:16px}',
-'.f13v-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}',
-'.f13v-stat{background:var(--p2);border:1px solid var(--l);border-radius:10px;padding:10px 12px;min-width:0}',
-'.f13v-stat b{display:block;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:20px;font-weight:500}',
-'.f13v-stat span{font-size:12px;color:var(--m)}',
-'.f13v-stat.ok b{color:var(--ok)}.f13v-stat.bad b{color:var(--bad)}.f13v-stat.mut b{color:var(--m)}.f13v-stat.lab b{color:var(--a)}',
-'.f13v-det{border:1px solid var(--l);border-radius:10px;background:var(--p2)}',
-'.f13v-det summary{list-style:none;cursor:pointer;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--m)}',
-'.f13v-det summary::-webkit-details-marker{display:none}',
-'.f13v-det summary .chev{display:flex;transition:transform .15s}',
-'.f13v-det[open] summary .chev{transform:rotate(90deg)}',
-'.f13v-list{margin:0;padding:0 12px 10px;list-style:none;max-height:180px;overflow-y:auto;overflow-x:hidden}',
-'.f13v-list li{font-size:12px;padding:5px 0;border-top:1px solid var(--l);display:flex;gap:8px;min-width:0}',
-'.f13v-list .id{font-family:"IBM Plex Mono",ui-monospace,monospace;color:var(--t);flex:none}',
-'.f13v-list .why{color:var(--m);overflow-wrap:anywhere;min-width:0}',
-'.f13v-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}',
-'.f13v-f{display:flex;flex-direction:column;gap:4px;min-width:0}',
-'.f13v-f.wide{grid-column:1/-1}',
-'.f13v-f label{font-size:12px;color:var(--m)}',
-'.f13v-f label i{color:var(--a);font-style:normal}',
-'.f13v-f input{font:inherit;font-size:14px;color:var(--t);background:var(--g);border:1px solid var(--l);border-radius:8px;padding:8px 10px;width:100%;min-width:0}',
-'.f13v-f input:focus{outline:none;border-color:var(--a)}',
-'.f13v-f .err{font-size:12px;color:var(--bad);min-height:0}',
-'.f13v-sec{font-size:12px;color:var(--m);text-transform:none;letter-spacing:.02em;margin-bottom:-6px}',
-'.f13v-cc{display:flex;gap:10px;align-items:flex-start;background:var(--p2);border:1px solid var(--l);border-radius:10px;padding:12px;cursor:pointer;font-size:12px;color:var(--m)}',
-'.f13v-cc input{margin:2px 0 0;accent-color:var(--a);width:16px;height:16px;flex:none}',
-'.f13v-cc strong{color:var(--t);font-weight:600}.f13v-cc a{color:var(--a)}',
-'.f13v-cc.need{border-color:var(--bad)}',
-'.f13v-note{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--m);padding:10px 12px;border-radius:10px;background:var(--p2);border:1px solid var(--l)}',
-'.f13v-note .ic{display:flex;flex:none;color:var(--warn)}',
-'.f13v-note.ok .ic{color:var(--ok)}.f13v-note.bad .ic{color:var(--bad)}',
-'.f13v-ft{display:flex;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid var(--l);flex-wrap:wrap}',
-'.f13v-status{font-size:12px;color:var(--m);flex:1 1 180px;min-width:0;overflow-wrap:anywhere}',
-'.f13v-btn{font:inherit;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;border-radius:9px;padding:9px 16px;cursor:pointer;border:1px solid var(--a);background:var(--a);color:var(--g);text-decoration:none;white-space:nowrap}',
-'.f13v-btn:disabled{opacity:.4;cursor:not-allowed}',
-'.f13v-btn.ghost{background:transparent;color:var(--t);border-color:var(--l)}',
-'.f13v-btn.ghost:hover{border-color:var(--m)}',
-'.f13v-bar{height:3px;background:var(--l);border-radius:2px;overflow:hidden}',
-'.f13v-bar>div{height:100%;width:0;background:var(--a);transition:width .25s}',
-'.f13v-dry{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--warn);border:1px solid var(--warn);border-radius:6px;padding:1px 6px;flex:none}',
-'.f13v-load{display:flex;align-items:center;gap:10px;color:var(--m);font-size:13px;padding:24px 0;justify-content:center}',
-'.f13v-spin{animation:f13vspin .9s linear infinite}',
-'@keyframes f13vspin{to{transform:rotate(360deg)}}',
-'@media (prefers-reduced-motion:reduce){.f13v-spin{animation-duration:2.4s}}',
-'@media (max-width:600px){.f13v-scrim{padding:0;align-items:flex-end}.f13v{max-width:none;max-height:92vh;border-radius:14px 14px 0 0}.f13v-grid{grid-template-columns:1fr}}'
+'.f13vp button,.f13vp input,.f13vp a{margin:0;box-shadow:none;text-transform:none;letter-spacing:normal;min-width:0;max-width:none;height:auto;line-height:1.2}',
+'.f13vp svg{flex:none;display:block}',
+'.f13vp :focus-visible{outline:2px solid var(--a);outline-offset:2px}',
+'.f13vp-hd{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--l)}',
+'.f13vp-hd .ic{color:var(--a);display:flex}',
+'.f13vp-ttl{font-size:16px;font-weight:600;letter-spacing:.01em}',
+'.f13vp-sub{font-size:12px;color:var(--m);font-family:"IBM Plex Mono",ui-monospace,monospace;overflow-wrap:anywhere}',
+'.f13vp-x{margin-left:auto;background:none;border:1px solid transparent;color:var(--m);border-radius:8px;width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}',
+'.f13vp-x:hover{color:var(--t);border-color:var(--l)}',
+'.f13vp-hd .f13vp-x{margin-left:auto}',
+'.f13vp-bd{padding:16px 18px;overflow-y:auto;overflow-x:hidden;flex:1 1 auto;display:flex;flex-direction:column;gap:16px}',
+'.f13vp-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}',
+'.f13vp-stat{background:var(--p2);border:1px solid var(--l);border-radius:10px;padding:10px 12px;min-width:0}',
+'.f13vp-stat b{display:block;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:20px;font-weight:500}',
+'.f13vp-stat span{font-size:12px;color:var(--m)}',
+'.f13vp-stat.ok b{color:var(--ok)}.f13vp-stat.bad b{color:var(--bad)}.f13vp-stat.mut b{color:var(--m)}.f13vp-stat.lab b{color:var(--a)}',
+'.f13vp-det{border:1px solid var(--l);border-radius:10px;background:var(--p2)}',
+'.f13vp-det summary{list-style:none;cursor:pointer;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--m)}',
+'.f13vp-det summary::-webkit-details-marker{display:none}',
+'.f13vp-det summary .chev{display:flex;transition:transform .15s}',
+'.f13vp-det[open] summary .chev{transform:rotate(90deg)}',
+'.f13vp-list{margin:0;padding:0 12px 10px;list-style:none;max-height:180px;overflow-y:auto;overflow-x:hidden}',
+'.f13vp-list li{font-size:12px;padding:5px 0;border-top:1px solid var(--l);display:flex;gap:8px;min-width:0}',
+'.f13vp-list .id{font-family:"IBM Plex Mono",ui-monospace,monospace;color:var(--t);flex:none}',
+'.f13vp-list .why{color:var(--m);overflow-wrap:anywhere;min-width:0}',
+'.f13vp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}',
+'.f13vp-f{display:flex;flex-direction:column;gap:4px;min-width:0}',
+'.f13vp-f.wide{grid-column:1/-1}',
+'.f13vp-f label{font-size:12px;color:var(--m)}',
+'.f13vp-f label i{color:var(--a);font-style:normal}',
+'.f13vp-f input{font:inherit;font-size:14px;color:var(--t);background:var(--g);border:1px solid var(--l);border-radius:8px;padding:8px 10px;width:100%;min-width:0}',
+'.f13vp-f input:focus{outline:none;border-color:var(--a)}',
+'.f13vp-f .err{font-size:12px;color:var(--bad);min-height:0}',
+'.f13vp-sec{font-size:12px;color:var(--m);text-transform:none;letter-spacing:.02em;margin-bottom:-6px}',
+'.f13vp-cc{display:flex;gap:10px;align-items:flex-start;background:var(--p2);border:1px solid var(--l);border-radius:10px;padding:12px;cursor:pointer;font-size:12px;color:var(--m)}',
+'.f13vp-cc input{margin:2px 0 0;accent-color:var(--a);width:16px;height:16px;flex:none}',
+'.f13vp-cc strong{color:var(--t);font-weight:600}.f13vp-cc a{color:var(--a)}',
+'.f13vp-cc.need{border-color:var(--bad)}',
+'.f13vp-note{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--m);padding:10px 12px;border-radius:10px;background:var(--p2);border:1px solid var(--l)}',
+'.f13vp-note .ic{display:flex;flex:none;color:var(--warn)}',
+'.f13vp-note.ok .ic{color:var(--ok)}.f13vp-note.bad .ic{color:var(--bad)}',
+'.f13vp-ft{display:flex;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid var(--l);flex-wrap:wrap}',
+'.f13vp-status{font-size:12px;color:var(--m);flex:1 1 180px;min-width:0;overflow-wrap:anywhere}',
+'.f13vp-btn{font:inherit;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;border-radius:9px;padding:9px 16px;cursor:pointer;border:1px solid var(--a);background:var(--a);color:var(--g);text-decoration:none;white-space:nowrap}',
+'.f13vp-btn:disabled{opacity:.4;cursor:not-allowed}',
+'.f13vp-btn.ghost{background:transparent;color:var(--t);border-color:var(--l)}',
+'.f13vp-btn.ghost:hover{border-color:var(--m)}',
+'.f13vp-bar{height:3px;background:var(--l);border-radius:2px;overflow:hidden}',
+'.f13vp-bar>div{height:100%;width:0;background:var(--a);transition:width .25s}',
+'.f13vp-dry{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--warn);border:1px solid var(--warn);border-radius:6px;padding:1px 6px;flex:none}',
+'.f13vp-load{display:flex;align-items:center;gap:10px;color:var(--m);font-size:13px;padding:24px 0;justify-content:center}',
+'.f13vp-spin{animation:f13vpspin .9s linear infinite}',
+'@keyframes f13vpspin{to{transform:rotate(360deg)}}',
+'@media (prefers-reduced-motion:reduce){.f13vp-spin{animation-duration:2.4s}}',
+'@media (max-width:600px){.f13vp-scrim{padding:0;align-items:flex-end}.f13vp{max-width:none;max-height:92vh;border-radius:14px 14px 0 0}.f13vp-grid{grid-template-columns:1fr}}'
 ].join('');
 
 function injectCss() {
-  if (document.getElementById('f13v-style')) return;
+  if (document.getElementById('f13vp-style')) return;
   var st = document.createElement('style');
-  st.id = 'f13v-style';
+  st.id = 'f13vp-style';
   st.textContent = CSS;
   document.head.appendChild(st);
 }
@@ -962,27 +965,27 @@ function openPushDialog(opts) {
   var prevFocus = document.activeElement;
 
   var scrim = document.createElement('div');
-  scrim.className = 'f13v-scrim';
+  scrim.className = 'f13vp-scrim';
   scrim.innerHTML =
-    '<div class="f13v" role="dialog" aria-modal="true" aria-labelledby="f13v-ttl">' +
-      '<div class="f13v-hd"><span class="ic">' + ICON.vault + '</span>' +
-        '<div style="min-width:0"><div class="f13v-ttl" id="f13v-ttl">Push to F13LD.vault</div>' +
-        '<div class="f13v-sub">' + esc(source) + ' · ' + plural(nDesigns, 'design') + '</div></div>' +
-        (opts.dryRun ? '<span class="f13v-dry" title="Nothing is written to the database">dry run</span>' : '') +
-        '<button class="f13v-x" type="button" aria-label="Close">' + ICON.close + '</button></div>' +
-      '<div class="f13v-bd"><div class="f13v-load">' + ICON.spin + 'Checking designs against F13LD.vault</div></div>' +
-      '<div class="f13v-ft"><div class="f13v-status"></div>' +
-        '<button class="f13v-btn" type="button" disabled>' + ICON.up + '<span>Push</span></button></div>' +
+    '<div class="f13vp" role="dialog" aria-modal="true" aria-labelledby="f13vp-ttl">' +
+      '<div class="f13vp-hd"><span class="ic">' + ICON.vault + '</span>' +
+        '<div style="min-width:0"><div class="f13vp-ttl" id="f13vp-ttl">Push to F13LD.vault</div>' +
+        '<div class="f13vp-sub">' + esc(source) + ' · ' + plural(nDesigns, 'design') + '</div></div>' +
+        (opts.dryRun ? '<span class="f13vp-dry" title="Nothing is written to the database">dry run</span>' : '') +
+        '<button class="f13vp-x" type="button" aria-label="Close">' + ICON.close + '</button></div>' +
+      '<div class="f13vp-bd"><div class="f13vp-load">' + ICON.spin + 'Checking designs against F13LD.vault</div></div>' +
+      '<div class="f13vp-ft"><div class="f13vp-status"></div>' +
+        '<button class="f13vp-btn" type="button" disabled>' + ICON.up + '<span>Push</span></button></div>' +
     '</div>';
   if (opts.accent) scrim.firstChild.style.setProperty('--a', opts.accent);
   document.body.appendChild(scrim);
 
   var box = scrim.firstChild;
-  var bd = box.querySelector('.f13v-bd');
-  var statusEl = box.querySelector('.f13v-status');
-  var btn = box.querySelector('.f13v-ft .f13v-btn');
+  var bd = box.querySelector('.f13vp-bd');
+  var statusEl = box.querySelector('.f13vp-status');
+  var btn = box.querySelector('.f13vp-ft .f13vp-btn');
   var btnLabel = btn.querySelector('span');
-  var xBtn = box.querySelector('.f13v-x');
+  var xBtn = box.querySelector('.f13vp-x');
   var busy = false, analysis = null, result = { pushed: false, designs: null, lab: null };
   var resolveFn;
   var done = new Promise(function (r) { resolveFn = r; });
@@ -1000,12 +1003,12 @@ function openPushDialog(opts) {
   scrim.addEventListener('mousedown', function (e) { if (e.target === scrim) close(); });
 
   function note(cls, icon, html) {
-    return '<div class="f13v-note ' + cls + '"><span class="ic">' + icon + '</span><div>' + html + '</div></div>';
+    return '<div class="f13vp-note ' + cls + '"><span class="ic">' + icon + '</span><div>' + html + '</div></div>';
   }
   function reasonList(title, entries) {
     if (!entries.length) return '';
-    return '<details class="f13v-det"><summary><span class="chev">' + ICON.chev + '</span>' + esc(title) + '</summary>' +
-           '<ul class="f13v-list">' + entries.map(function (e) {
+    return '<details class="f13vp-det"><summary><span class="chev">' + ICON.chev + '</span>' + esc(title) + '</summary>' +
+           '<ul class="f13vp-list">' + entries.map(function (e) {
              return '<li><span class="id">' + esc(e.label) + '</span><span class="why">' + esc(e.reason) + '</span></li>';
            }).join('') + '</ul></details>';
   }
@@ -1015,12 +1018,12 @@ function openPushDialog(opts) {
     var labN = (opts.labResults || []).length;
     var held = opts.heldBack || [];
     var stats =
-      '<div class="f13v-stats">' +
-        '<div class="f13v-stat ok"><b>' + c.valid + '</b><span>ready to add</span></div>' +
-        '<div class="f13v-stat mut"><b>' + c.dupe + '</b><span>already in Vault</span></div>' +
-        '<div class="f13v-stat bad"><b>' + c.invalid + '</b><span>failed checks</span></div>' +
-        (labN ? '<div class="f13v-stat lab"><b>' + labN + '</b><span>Lab ' + (labN === 1 ? 'solve' : 'solves') + '</span></div>' : '') +
-        (held.length ? '<div class="f13v-stat mut"><b>' + held.length + '</b><span>held back</span></div>' : '') +
+      '<div class="f13vp-stats">' +
+        '<div class="f13vp-stat ok"><b>' + c.valid + '</b><span>ready to add</span></div>' +
+        '<div class="f13vp-stat mut"><b>' + c.dupe + '</b><span>already in Vault</span></div>' +
+        '<div class="f13vp-stat bad"><b>' + c.invalid + '</b><span>failed checks</span></div>' +
+        (labN ? '<div class="f13vp-stat lab"><b>' + labN + '</b><span>Lab ' + (labN === 1 ? 'solve' : 'solves') + '</span></div>' : '') +
+        (held.length ? '<div class="f13vp-stat mut"><b>' + held.length + '</b><span>held back</span></div>' : '') +
       '</div>';
     var failed = analysis.items.filter(function (it) { return it.status === 'invalid'; })
       .map(function (it) { return { label: designLabel(it), reason: it.reason }; });
@@ -1036,25 +1039,25 @@ function openPushDialog(opts) {
       reasonList('Why ' + plural(failed.length, 'design') + ' failed', failed) +
       reasonList(plural(dupes.length, 'design') + ' already in F13LD.vault', dupes) +
       reasonList(plural(held.length, 'design') + ' held back by ' + source, held) +
-      '<div class="f13v-sec">Contributor — attached to every design in this push</div>' +
-      '<div class="f13v-grid">' +
-        '<div class="f13v-f"><label for="f13v-name">Name <i>*</i></label><input id="f13v-name" maxlength="120" autocomplete="name" placeholder="e.g. Matt Shomper, Acme Lattice Labs"><div class="err"></div></div>' +
-        '<div class="f13v-f"><label for="f13v-contact">Contact <i>*</i></label><input id="f13v-contact" maxlength="200" placeholder="email · ORCID · GitHub · lab URL"><div class="err"></div></div>' +
-        '<div class="f13v-f wide"><label for="f13v-notes">Notes</label><input id="f13v-notes" maxlength="280" placeholder="e.g. Submitted alongside RAPID 2026 paper"><div class="err"></div></div>' +
-        '<div class="f13v-f wide"><label for="f13v-domain">Domain <i>*</i></label><input id="f13v-domain" maxlength="80" placeholder="e.g. orthopedic"><div class="err"></div></div>' +
+      '<div class="f13vp-sec">Contributor — attached to every design in this push</div>' +
+      '<div class="f13vp-grid">' +
+        '<div class="f13vp-f"><label for="f13vp-name">Name <i>*</i></label><input id="f13vp-name" maxlength="120" autocomplete="name" placeholder="e.g. Matt Shomper, Acme Lattice Labs"><div class="err"></div></div>' +
+        '<div class="f13vp-f"><label for="f13vp-contact">Contact <i>*</i></label><input id="f13vp-contact" maxlength="200" placeholder="email · ORCID · GitHub · lab URL"><div class="err"></div></div>' +
+        '<div class="f13vp-f wide"><label for="f13vp-notes">Notes</label><input id="f13vp-notes" maxlength="280" placeholder="e.g. Submitted alongside RAPID 2026 paper"><div class="err"></div></div>' +
+        '<div class="f13vp-f wide"><label for="f13vp-domain">Domain <i>*</i></label><input id="f13vp-domain" maxlength="80" placeholder="e.g. orthopedic"><div class="err"></div></div>' +
       '</div>' +
-      '<label class="f13v-cc"><input type="checkbox" id="f13v-cc"><span>' + LICENSE_TEXT +
+      '<label class="f13vp-cc"><input type="checkbox" id="f13vp-cc"><span>' + LICENSE_TEXT +
         (consented ? ' <br><span style="color:var(--ok)">Confirmed earlier this browser session.</span>' : '') + '</span></label>' +
-      '<div class="f13v-bar" hidden><div></div></div>';
-    box.querySelector('#f13v-name').value = who.name;
-    box.querySelector('#f13v-contact').value = who.contact;
-    box.querySelector('#f13v-notes').value = who.notes;
-    box.querySelector('#f13v-domain').value = dom;
-    box.querySelector('#f13v-cc').checked = consented;
-    ['f13v-name', 'f13v-contact', 'f13v-domain'].forEach(function (id) {
+      '<div class="f13vp-bar" hidden><div></div></div>';
+    box.querySelector('#f13vp-name').value = who.name;
+    box.querySelector('#f13vp-contact').value = who.contact;
+    box.querySelector('#f13vp-notes').value = who.notes;
+    box.querySelector('#f13vp-domain').value = dom;
+    box.querySelector('#f13vp-cc').checked = consented;
+    ['f13vp-name', 'f13vp-contact', 'f13vp-domain'].forEach(function (id) {
       box.querySelector('#' + id).addEventListener('input', function () { fieldErr(id, ''); refresh(); });
     });
-    box.querySelector('#f13v-cc').addEventListener('change', function () { box.querySelector('.f13v-cc').classList.remove('need'); refresh(); });
+    box.querySelector('#f13vp-cc').addEventListener('change', function () { box.querySelector('.f13vp-cc').classList.remove('need'); refresh(); });
     var nothing = c.valid === 0 && !labN;
     btn.disabled = nothing;
     btnLabel.textContent = c.valid ? 'Push ' + plural(c.valid, 'design') : (labN ? 'Push ' + plural(labN, 'Lab solve') : 'Nothing to push');
@@ -1068,29 +1071,29 @@ function openPushDialog(opts) {
   function refresh() {
     if (!analysis || busy) return;
     var missing = [];
-    if (!val('f13v-name')) missing.push('name');
-    if (!val('f13v-contact')) missing.push('contact');
-    if (!val('f13v-domain')) missing.push('domain');
-    if (!box.querySelector('#f13v-cc').checked) missing.push('rights confirmation');
+    if (!val('f13vp-name')) missing.push('name');
+    if (!val('f13vp-contact')) missing.push('contact');
+    if (!val('f13vp-domain')) missing.push('domain');
+    if (!box.querySelector('#f13vp-cc').checked) missing.push('rights confirmation');
     statusEl.textContent = missing.length ? 'Needs: ' + missing.join(', ') : 'Ready';
   }
 
   async function push() {
     var ok = true;
-    [['f13v-name', 'Enter a name'], ['f13v-contact', 'Enter a contact'], ['f13v-domain', 'Enter a domain']].forEach(function (p) {
+    [['f13vp-name', 'Enter a name'], ['f13vp-contact', 'Enter a contact'], ['f13vp-domain', 'Enter a domain']].forEach(function (p) {
       if (!val(p[0])) { fieldErr(p[0], p[1]); ok = false; }
     });
-    var cc = box.querySelector('#f13v-cc');
-    if (!cc.checked) { box.querySelector('.f13v-cc').classList.add('need'); ok = false; }
+    var cc = box.querySelector('#f13vp-cc');
+    if (!cc.checked) { box.querySelector('.f13vp-cc').classList.add('need'); ok = false; }
     if (!ok) {
       statusEl.textContent = 'Fill in the marked fields first';
-      var firstBad = Array.prototype.find.call(bd.querySelectorAll('.f13v-f .err'), function (e) { return e.textContent; });
-      var target = firstBad ? firstBad.parentNode : box.querySelector('.f13v-cc.need');
+      var firstBad = Array.prototype.find.call(bd.querySelectorAll('.f13vp-f .err'), function (e) { return e.textContent; });
+      var target = firstBad ? firstBad.parentNode : box.querySelector('.f13vp-cc.need');
       if (target && target.scrollIntoView) target.scrollIntoView({ block: 'nearest' });
       return;
     }
 
-    var contributor = { name: val('f13v-name'), contact: val('f13v-contact'), notes: val('f13v-notes') };
+    var contributor = { name: val('f13vp-name'), contact: val('f13vp-contact'), notes: val('f13vp-notes') };
     saveContributor(contributor);
     setConsent(true);
 
@@ -1098,14 +1101,14 @@ function openPushDialog(opts) {
     btn.disabled = true; xBtn.disabled = true;
     btnLabel.textContent = 'Pushing';
     Array.prototype.forEach.call(bd.querySelectorAll('input'), function (i) { i.disabled = true; });
-    var bar = bd.querySelector('.f13v-bar'); bar.hidden = false;
+    var bar = bd.querySelector('.f13vp-bar'); bar.hidden = false;
     var fill = bar.firstChild;
     function progress(evt) {
       if (evt.total) fill.style.width = Math.round(evt.done / evt.total * 100) + '%';
       statusEl.textContent = evt.message;
     }
 
-    var built = buildRows(analysis, { contributor: contributor, domain: val('f13v-domain'), provenanceKind: kind });
+    var built = buildRows(analysis, { contributor: contributor, domain: val('f13vp-domain'), provenanceKind: kind });
     var lab = null, labPrep = null;
     try {
       if (built.rows.length) {
@@ -1150,8 +1153,8 @@ function openPushDialog(opts) {
       reasonList('Details', errs) +
       (opts.dryRun ? note('', ICON.alert, 'Dry run: nothing was written to the database.') : '');
     statusEl.textContent = '';
-    btn.outerHTML = '<a class="f13v-btn ghost" href="' + VAULT_URL + '" target="_blank" rel="noopener">' + ICON.out + '<span>Open F13LD.vault</span></a>' +
-                    '<button class="f13v-btn" type="button" data-close>' + ICON.check + '<span>Done</span></button>';
+    btn.outerHTML = '<a class="f13vp-btn ghost" href="' + VAULT_URL + '" target="_blank" rel="noopener">' + ICON.out + '<span>Open F13LD.vault</span></a>' +
+                    '<button class="f13vp-btn" type="button" data-close>' + ICON.check + '<span>Done</span></button>';
     box.querySelector('[data-close]').addEventListener('click', close);
     box.querySelector('[data-close]').focus();
   }
@@ -1161,7 +1164,7 @@ function openPushDialog(opts) {
   analyze(opts.json).then(function (a) {
     analysis = a;
     renderForm();
-    var first = box.querySelector('#f13v-name');
+    var first = box.querySelector('#f13vp-name');
     if (first && !first.value) first.focus(); else btn.focus();
   }).catch(function (e) {
     bd.innerHTML = note('bad', ICON.alert, 'Could not read this export: ' + esc(e.message));
