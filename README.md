@@ -47,7 +47,7 @@ Each design must pass all of the following before it is accepted:
 ## Status and next steps
 
 - **v0.9.1 (2026-10-10):** wave designs need whole-number mode indices. Sweep v0.29.1 exports (Wave family, cell stretch `field.stretch`, every family's curvature / topology now measured, `metrics_N`) validate unchanged — new fields land in `metrics_extended`.
-- **Next:** Matt wipes and re-seeds F13LD.vault from fresh Sweep v0.29.1 exports. When Sweep adds Bundle (v0.30.0), check its exports against the bundle structure check (and whether the cell box needs validating).
+- **Next:** accept F13LD.lab results exports (the Lab → Vault round trip, scoped in `f13ld.lab/docs/VAULT_ROUNDTRIP_SCOPE.md`: match rows by content hash, write Lab-verified results, mirror any policy change in `policyCheckRow`). Matt wipes and re-seeds F13LD.vault from fresh Sweep v0.29.1 exports. When Sweep adds Bundle (v0.30.0), check its exports against the bundle structure check (and whether the cell box needs validating).
 
 ## Output summary
 
