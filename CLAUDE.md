@@ -28,3 +28,7 @@ https://mshomper.github.io/f13ld.ingest
   every icon is drawn (inline SVG); 12 px minimum text.
 - **Words**: never use "genuine" or "genuinely" in UI text or docs.
 - **Heavy checks run on Matt's machine**, not in the VM: hand him the command.
+- **Noise revisions (push 1.1.0)**: Vault takes noise with `surface.noise_rev` 2 only (`noiseRevReason`, `NOISE_REV_VAULT`); the database enforces it with the restrictive policy `f13ld_designs_noise_rev2` (`docs/sql/2026-10-11_noise_rev2.sql`). Check with `node tests/noise-rev.js`. Spec: F13LD.noise `docs/NOISE_REV2.md`.
+
+## Notes
+- Latest session recap: `docs/SESSION_RECAP_2026-10-11.md` (v0.11.0, fixed noise only). Previous: `docs/SESSION_RECAP_2026-10-10.md`.
