@@ -37,7 +37,7 @@
    ============================================================ */
 (function (root) {
 
-var VERSION = '1.0.1';
+var VERSION = '1.1.0';
 
 // ── Config ─────────────────────────────────────────────────────────────
 var SUPABASE_URL = 'https://axinljpecycnvfncyhfs.supabase.co';
@@ -77,6 +77,22 @@ async function contentHash(recipe) {
   return Array.from(new Uint8Array(buf))
     .map(function(b){ return b.toString(16).padStart(2, '0'); })
     .join('');
+}
+
+// ── Noise revision (v1.1.0) ────────────────────────────────────────────
+// F13LD.vault takes fixed noise only: surface.noise_rev 2, written by
+// F13LD.noise v0.12.0+ (and carried by Sweep / Lab designs made from it).
+// Revision 1 — no noise_rev, F13LD.noise ≤ v0.11.0 — used a CPU simplex with
+// a lattice error (~12 % of gradients wrong, range ≈ ±4.5); it still builds
+// in Mesh / Lab / Sweep for parts already made, but it stays out of Vault.
+var NOISE_REV_VAULT = 2;
+function noiseRevReason(surface) {
+  var r = surface ? surface.noise_rev : undefined;
+  if (r == null) return 'noise revision 1 (F13LD.noise v0.11.0 or older) — Vault takes fixed noise only; re-export it from F13LD.noise v0.12.0+';
+  if (typeof r !== 'number' || r !== Math.floor(r)) return 'noise_rev must be a whole number';
+  if (r < NOISE_REV_VAULT) return 'noise revision ' + r + ' — Vault takes fixed noise only (revision ' + NOISE_REV_VAULT + '); re-export it from F13LD.noise v0.12.0+';
+  if (r > NOISE_REV_VAULT) return 'noise revision ' + r + ' is newer than this Ingest knows (' + NOISE_REV_VAULT + ')';
+  return null;
 }
 
 // ── Per-family validation ──────────────────────────────────────────────
@@ -186,6 +202,8 @@ function validateDesign(d) {
   if (design.family === 'noise') {
     if (!design.surface) return 'noise missing surface block';
     if (!design.surface.noise_type) return 'noise missing noise_type';
+    var nr = noiseRevReason(design.surface);
+    if (nr) return nr;
   }
   if (design.family === 'grain') {
     if (!design.field) return 'grain missing field block';
@@ -245,6 +263,9 @@ function validateDesign(d) {
 // Policy (as of 2026-05): all of content_hash, family, schema_version,
 // domain, contributor_name, contributor_contact must be non-empty
 // strings; license must be non-null; family must be in KNOWN_FAMILIES.
+// 2026-10-11 (restrictive policy f13ld_designs_noise_rev2, docs/sql/
+// 2026-10-11_noise_rev2.sql): a noise row's recipe.surface.noise_rev must be
+// a number >= 2.
 //
 // Returns null if the row would pass server-side, otherwise a short
 // reason string in the same shape as validateDesign().
@@ -267,6 +288,11 @@ function policyCheckRow(row) {
     return 'policy: contributor_contact empty';
   if (row.license == null)
     return 'policy: license null';
+  if (row.family === 'noise') {
+    var nrev = row.recipe && row.recipe.surface ? row.recipe.surface.noise_rev : undefined;
+    if (typeof nrev !== 'number' || !(nrev >= NOISE_REV_VAULT))
+      return 'policy: noise recipe is not noise revision ' + NOISE_REV_VAULT;
+  }
   return null;
 }
 
@@ -1177,6 +1203,7 @@ function openPushDialog(opts) {
 // ── Exports ────────────────────────────────────────────────────────────
 root.F13LDVault = {
   VERSION: VERSION,
+  NOISE_REV_VAULT: NOISE_REV_VAULT,
   CONFIG: { SUPABASE_URL: SUPABASE_URL, SUPABASE_KEY: SUPABASE_KEY, TABLE: TABLE, LAB_TABLE: LAB_TABLE,
             BATCH_SIZE: BATCH_SIZE, LICENSE_TAG: LICENSE_TAG, KNOWN_FAMILIES: KNOWN_FAMILIES.slice(),
             VF_MIN: VF_MIN, VF_LOW_THRESHOLD: VF_LOW_THRESHOLD, VF_MAX: VF_MAX, MIN_CONNECT_IDX: MIN_CONNECT_IDX,
