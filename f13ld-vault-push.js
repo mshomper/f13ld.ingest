@@ -37,7 +37,7 @@
    ============================================================ */
 (function (root) {
 
-var VERSION = '1.1.0';
+var VERSION = '1.1.1';
 
 // ── Config ─────────────────────────────────────────────────────────────
 var SUPABASE_URL = 'https://axinljpecycnvfncyhfs.supabase.co';
@@ -58,6 +58,7 @@ var VF_MIN           = 0.50;
 var VF_LOW_THRESHOLD = 1.25;
 var VF_MAX           = 80.0;
 var MIN_CONNECT_IDX  = 0.33;  // 1 of 3 axes — connect_idx scale {0, 0.33, 0.67, 1}
+var ANISO_CAP        = 99;    // 1.1.1 — Sweep caps anisotropy at 99 (54-estimate.js)
 
 var KNOWN_FAMILIES = ['tpms', 'noise', 'grain', 'beam', 'foam', 'wave', 'bundle'];   // v0.9.0: foam, wave, bundle (Sweep v0.27+)
 
@@ -184,12 +185,26 @@ function validateDesign(d) {
   // AND anisotropy is not null. Null anisotropy from v0.14+ means fewer
   // than 2 axes percolate at the canonical (hi-res) level — consistency
   // check doesn't apply.
+  //
+  // 1.1.1 — Sweep v0.32.0 leaves out of anisotropy any axis whose stiffness
+  // comes from the pore material alone (named in stiffness_flag_reasons), and
+  // caps anisotropy at ANISO_CAP. So the stated value passes when it matches
+  // max ÷ min over ANY two or three of the connected axes, with the ratio
+  // capped the same way. A value that matches no axis pair is still refused.
   if (typeof b.anisotropy === 'number') {
     var connected = axes.map(function(a){ return b[a]; }).filter(function(e){ return e > 1e-7; });
     if (connected.length >= 2) {
-      var computed = Math.max.apply(null, connected) / Math.min.apply(null, connected);
-      if (Math.abs(computed - b.anisotropy) / Math.max(computed, 0.001) > 0.30)
-        return 'anisotropy ' + b.anisotropy.toFixed(2) + ' inconsistent with E_x/E_y/E_z (computed ' + computed.toFixed(2) + ')';
+      var subsets = [connected];
+      if (connected.length === 3)
+        subsets.push([connected[0], connected[1]], [connected[0], connected[2]], [connected[1], connected[2]]);
+      var ratios = subsets.map(function (s) {
+        return Math.min(Math.max.apply(null, s) / Math.min.apply(null, s), ANISO_CAP);
+      });
+      var matches = ratios.some(function (r) {
+        return Math.abs(r - b.anisotropy) / Math.max(r, 0.001) <= 0.30;
+      });
+      if (!matches)
+        return 'anisotropy ' + b.anisotropy.toFixed(2) + ' inconsistent with E_x/E_y/E_z (computed ' + ratios[0].toFixed(2) + ')';
     }
   }
 
