@@ -33,4 +33,4 @@ https://mshomper.github.io/f13ld.ingest
 - **Anisotropy check (push 1.1.1)**: Sweep v0.32.0 leaves pore-level axes out of anisotropy and caps it at 99, so `validateDesign` accepts a value that matches max ÷ min over any two or three connected axes (capped at `ANISO_CAP`). Check with `node tests/anisotropy.js`.
 
 ## Notes
-- Latest session recap: `docs/SESSION_RECAP_2026-10-11.md` (v0.11.0, fixed noise only). Previous: `docs/SESSION_RECAP_2026-10-10.md`.
+- Latest session recap: `docs/SESSION_RECAP_2026-10-13.md` (v0.11.1, branch: anisotropy check follows Sweep v0.32.0). Previous: `docs/SESSION_RECAP_2026-10-11.md` (v0.11.0, fixed noise only), `docs/SESSION_RECAP_2026-10-10.md`.
